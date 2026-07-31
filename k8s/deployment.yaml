@@ -113,15 +113,6 @@ spec:
             medium: Memory  # Fast in-memory workspace for func scaffolding
             sizeLimit: "2Gi"
 
-      initContainers:
-        # Verify kubectl can reach the cluster before starting FastAPI
-        - name: cluster-connectivity-check
-          image: bitnami/kubectl:latest
-          command: ["kubectl", "get", "namespace", "tenant-functions", "--request-timeout=10s"]
-          resources:
-            requests:
-              cpu: "10m"
-              memory: "32Mi"
 
       containers:
         - name: faas-platform-api
