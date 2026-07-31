@@ -273,12 +273,11 @@ jobs:
             sed -e "s|image: .*/faas-platform-api:.*|image: ${DOCKER_HUB_USER}/faas-platform-api:${IMAGE_TAG}|g" \
               k8s/deployment.yaml | kubectl apply -f -
 
-            # ── 7. Wait for rollout ────────────────────────────────────
-            echo "⏳ Waiting for rollout..."
-            kubectl rollout restart deployment/faas-platform-api -n faas-platform
+            # ── 7. Wait for rollout ────────────────────────────────────────────
+            echo "⏳ Waiting for rollout (up to 10 min)..."
             kubectl rollout status deployment/faas-platform-api \
               -n faas-platform \
-              --timeout=300s
+              --timeout=600s
 
             # ── 8. Verify pods are running ─────────────────────────────
             echo ""
