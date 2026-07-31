@@ -187,6 +187,6 @@ kubectl logs -n tenant-functions -l serving.knative.dev/service=my-function --pr
 
 ## Access Points (Production)
 
-- 🌐 **FaaS UI**: `http://<DO_DROPLET_IP>:30081`
-- 📚 **API Docs (Swagger)**: `http://<DO_DROPLET_IP>:30081/docs`
-- 🛡️ **Health JSON**: `http://<DO_DROPLET_IP>:30081/health`
+- 🌐 **FaaS UI**: [http://134.122.61.206:30081](http://134.122.61.206:30081)
+- 📚 **API Docs (Swagger)**: [http://134.122.61.206:30081/docs](http://134.122.61.206:30081/docs)
+- 🛡️ **Health JSON**: [http://134.122.61.206:30081/health](http://134.122.61.206:30081/health)

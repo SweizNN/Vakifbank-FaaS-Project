@@ -253,7 +253,7 @@ jobs:
             # pod can push built function images to Docker Hub.
             echo "🔐 Updating Docker Hub registry secret..."
             kubectl create secret docker-registry docker-hub-creds \
-              --docker-server=https://index.docker.io/v1/ \
+              --docker-server=docker.io \
               --docker-username="${{ secrets.DOCKER_HUB_USERNAME }}" \
               --docker-password="${{ secrets.DOCKER_HUB_TOKEN }}" \
               --namespace=faas-platform \
@@ -270,7 +270,7 @@ jobs:
             DOCKER_HUB_USER="${{ secrets.DOCKER_HUB_USER }}"
             # Replace both the username prefix AND the :latest tag so the
             # manifest works correctly regardless of which Docker Hub account is used.
-            sed -e "s|image: .*/faas-platform-api:.*|image: ${DOCKER_HUB_USER}/faas-platform-api:${IMAGE_TAG}|g" \
+            sed -e "s|image: .*/faas-platform-api:.*|image: docker.io/${DOCKER_HUB_USER}/faas-platform-api:${IMAGE_TAG}|g" \
               k8s/deployment.yaml | kubectl apply -f -
 
             # ── 7. Wait for rollout ────────────────────────────────────────────

@@ -97,6 +97,8 @@ spec:
         app: faas-platform-api
     spec:
       serviceAccountName: faas-orchestrator
+      imagePullSecrets:
+        - name: docker-hub-creds
 
       # Allow the container to access the Docker socket for buildpacks
       # (only needed if running docker-in-docker; with Buildpacks this
