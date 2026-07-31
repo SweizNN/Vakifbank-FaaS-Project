@@ -1,0 +1,36 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── IDE & editor ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Local test artifacts ──────────────────────────────────────────────────────
+*.log
+*.tmp
+
+# ── func CLI workspace (created at runtime, not source) ──────────────────────
+# These are temp directories created by 'func create' inside the container.
+# Never commit them — they are ephemeral build artifacts.
+/tmp/faas-workspace/
+
+# ── Secrets (never commit these) ─────────────────────────────────────────────
+.env
+.env.local
+*.pem
+*.key
+kubeconfig

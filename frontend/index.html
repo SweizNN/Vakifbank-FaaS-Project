@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VakıfBank FaaS Platform — Internal Developer Platform</title>
+  <meta name="description" content="VakıfBank Internal Developer Platform: Deploy serverless functions on Knative with zero configuration. Paste code, select language, go live instantly." />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- CodeMirror -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/theme/dracula.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/python/python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/go/go.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/edit/matchbrackets.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/addon/edit/closebrackets.min.js"></script>
+
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       DESIGN TOKENS
+    ═══════════════════════════════════════════════════════════════ */
+    :root {
+      --bg-deep:        #060b14;
+      --bg-surface:     #0d1524;
+      --bg-card:        #111d32;
+      --bg-card-hover:  #162240;
+      --bg-input:       #0a1220;
+      --border:         rgba(99, 120, 180, 0.18);
+      --border-glow:    rgba(99, 183, 255, 0.35);
+
+      --accent-blue:    #4f9cf9;
+      --accent-indigo:  #818cf8;
+      --accent-violet:  #a78bfa;
+      --accent-green:   #34d399;
+      --accent-red:     #f87171;
+      --accent-amber:   #fbbf24;
+      --accent-cyan:    #22d3ee;
+
+      --text-primary:   #e8edf8;
+      --text-secondary: #8898b8;
+      --text-muted:     #4a5a78;
+      --text-code:      #a8d8ff;
+
+      --gradient-hero:  linear-gradient(135deg, #4f9cf9 0%, #818cf8 50%, #a78bfa 100%);
+      --gradient-card:  linear-gradient(145deg, rgba(79,156,249,0.05) 0%, rgba(129,140,248,0.03) 100%);
+      --gradient-btn:   linear-gradient(135deg, #4f9cf9 0%, #818cf8 100%);
+
+      --radius-sm:   6px;
+      --radius-md:   12px;
+      --radius-lg:   20px;
+      --radius-xl:   28px;
+
+      --shadow-card:  0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px var(--border);
+      --shadow-glow:  0 0 40px rgba(79,156,249,0.15);
+      --shadow-btn:   0 4px 20px rgba(79,156,249,0.3);
+
+      --transition: 0.22s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* Animated mesh background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 20%, rgba(79,156,249,0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(129,140,248,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 60% at 50% 50%, rgba(167,139,250,0.04) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+      animation: bgPulse 12s ease-in-out infinite alternate;
+    }
+
+    @keyframes bgPulse {
+      0%   { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SCROLLBAR
+    ═══════════════════════════════════════════════════════════════ */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-deep); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LAYOUT
+    ═══════════════════════════════════════════════════════════════ */
+    .app-wrapper {
+      position: relative;
+      z-index: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HEADER / NAV
+    ═══════════════════════════════════════════════════════════════ */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 48px;
+      position: sticky;
+      top: 0;
+      background: rgba(6,11,20,0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      z-index: 100;
+    }
+
+    .header-brand { display: flex; align-items: center; gap: 14px; }
+
+    .header-logo {
+      width: 40px; height: 40px;
+      border-radius: var(--radius-md);
+      background: var(--gradient-hero);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      box-shadow: var(--shadow-btn);
+      flex-shrink: 0;
+    }
+
+    .header-title { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; color: var(--text-primary); }
+    .header-subtitle { font-size: 11px; color: var(--text-muted); font-weight: 400; letter-spacing: 0.5px; text-transform: uppercase; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+
+    .status-badge {
+      display: flex; align-items: center; gap: 7px;
+      padding: 6px 14px; border-radius: 100px;
+      border: 1px solid var(--border); background: var(--bg-card);
+      font-size: 12px; font-weight: 500; color: var(--text-secondary);
+      cursor: pointer; transition: var(--transition);
+    }
+    .status-badge:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-muted); transition: var(--transition);
+    }
+    .status-dot.healthy  { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); animation: pulse 2s infinite; }
+    .status-dot.degraded { background: var(--accent-amber); box-shadow: 0 0 8px var(--accent-amber); }
+    .status-dot.error    { background: var(--accent-red);   box-shadow: 0 0 8px var(--accent-red); }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HERO SECTION
+    ═══════════════════════════════════════════════════════════════ */
+    .hero { text-align: center; padding: 20px 0 56px; }
+
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 14px; border-radius: 100px;
+      background: rgba(79,156,249,0.1); border: 1px solid rgba(79,156,249,0.25);
+      font-size: 12px; font-weight: 600; color: var(--accent-blue);
+      letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      font-size: clamp(32px, 5vw, 52px); font-weight: 800;
+      letter-spacing: -1.5px; line-height: 1.1;
+      background: var(--gradient-hero);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      margin-bottom: 16px;
+    }
+
+    .hero-desc { font-size: 17px; color: var(--text-secondary); max-width: 560px; margin: 0 auto; line-height: 1.7; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       STATS ROW
+    ═══════════════════════════════════════════════════════════════ */
+    .stats-row {
+      display: flex; justify-content: center; gap: 40px;
+      padding: 32px 0; margin-bottom: 48px;
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .stat-item { text-align: center; }
+    .stat-value {
+      font-size: 28px; font-weight: 800; letter-spacing: -0.8px;
+      background: var(--gradient-hero);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.6px; margin-top: 2px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MAIN GRID
+    ═══════════════════════════════════════════════════════════════ */
+    .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px; }
+    @media (max-width: 960px) { .main-grid { grid-template-columns: 1fr; } }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CARD
+    ═══════════════════════════════════════════════════════════════ */
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-xl); padding: 28px;
+      box-shadow: var(--shadow-card); background-image: var(--gradient-card);
+      transition: var(--transition); position: relative; overflow: hidden;
+    }
+    .card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(79,156,249,0.3), transparent);
+    }
+    .card:hover { border-color: var(--border-glow); box-shadow: var(--shadow-card), var(--shadow-glow); }
+
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+    .card-title { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.2px; }
+    .card-icon {
+      width: 32px; height: 32px; border-radius: var(--radius-sm);
+      background: rgba(79,156,249,0.12); border: 1px solid rgba(79,156,249,0.2);
+      display: flex; align-items: center; justify-content: center; font-size: 14px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FORM ELEMENTS
+    ═══════════════════════════════════════════════════════════════ */
+    .form-group { margin-bottom: 18px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+
+    label { display: block; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 8px; }
+
+    input[type="text"], select {
+      width: 100%; background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: 11px 14px;
+      font-size: 14px; font-family: 'Inter', sans-serif; color: var(--text-primary);
+      outline: none; transition: var(--transition); appearance: none; -webkit-appearance: none;
+    }
+    input[type="text"]:focus, select:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(79,156,249,0.12); }
+    input[type="text"]::placeholder { color: var(--text-muted); }
+
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a5a78' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center;
+      padding-right: 36px; cursor: pointer;
+    }
+    select option { background: var(--bg-surface); }
+
+    /* ── CodeMirror overrides ── */
+    .editor-wrapper { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; transition: var(--transition); }
+    .editor-wrapper:focus-within { border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(79,156,249,0.12); }
+
+    .editor-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 14px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--border);
+    }
+    .editor-lang-badge { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--accent-blue); font-weight: 500; }
+    .editor-hint { font-size: 10px; color: var(--text-muted); }
+
+    .CodeMirror { font-family: 'JetBrains Mono', monospace !important; font-size: 13px !important; line-height: 1.7 !important; height: 320px !important; background: #0a1220 !important; }
+    .CodeMirror-scroll { padding-bottom: 8px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BUTTONS
+    ═══════════════════════════════════════════════════════════════ */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 12px 24px; border-radius: var(--radius-md);
+      font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600;
+      cursor: pointer; border: none; outline: none;
+      transition: var(--transition); white-space: nowrap; letter-spacing: -0.2px;
+    }
+    .btn-primary { background: var(--gradient-btn); color: white; box-shadow: var(--shadow-btn); width: 100%; }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(79,156,249,0.4); }
+    .btn-primary:active:not(:disabled) { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(79,156,249,0.05); }
+    .btn-danger { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.25); color: var(--accent-red); padding: 6px 14px; font-size: 12px; border-radius: var(--radius-sm); }
+    .btn-danger:hover { background: rgba(248,113,113,0.2); border-color: var(--accent-red); }
+    .btn-sm { padding: 7px 16px; font-size: 12px; border-radius: var(--radius-sm); }
+
+    .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LOG STREAM
+    ═══════════════════════════════════════════════════════════════ */
+    .log-panel { background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0; height: 280px; overflow: hidden; display: flex; flex-direction: column; }
+    .log-topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2); flex-shrink: 0; }
+    .log-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; display: flex; align-items: center; gap: 8px; }
+    .log-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); transition: var(--transition); }
+    .log-status-dot.streaming { background: var(--accent-green); animation: pulse 1s infinite; }
+    .log-status-dot.error   { background: var(--accent-red); }
+    .log-status-dot.success { background: var(--accent-green); }
+    .log-content { flex: 1; overflow-y: auto; padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.8; }
+    .log-line { margin: 0; padding: 0; }
+    .log-line.step    { color: var(--accent-blue);  font-weight: 600; margin-top: 6px; }
+    .log-line.error   { color: var(--accent-red); }
+    .log-line.success { color: var(--accent-green); font-weight: 600; }
+    .log-line.url     { color: var(--accent-cyan); }
+    .log-line.muted   { color: var(--text-muted); }
+    .log-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px; color: var(--text-muted); font-size: 13px; font-family: 'Inter', sans-serif; }
+    .log-placeholder-icon { font-size: 32px; opacity: 0.4; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SUCCESS RESULT CARD
+    ═══════════════════════════════════════════════════════════════ */
+    .result-card { display: none; background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.3); border-radius: var(--radius-lg); padding: 22px; margin-top: 18px; animation: slideUp 0.4s cubic-bezier(0.4,0,0.2,1); }
+    .result-card.visible { display: block; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .result-label { font-size: 11px; font-weight: 700; color: var(--accent-green); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+    .result-url { display: flex; align-items: center; gap: 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; }
+    .result-url-text { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--accent-cyan); word-break: break-all; line-height: 1.5; }
+    .copy-btn { flex-shrink: 0; padding: 6px 12px; background: rgba(79,156,249,0.1); border: 1px solid rgba(79,156,249,0.2); border-radius: var(--radius-sm); color: var(--accent-blue); font-size: 11px; font-weight: 600; cursor: pointer; transition: var(--transition); font-family: 'Inter', sans-serif; }
+    .copy-btn:hover { background: rgba(79,156,249,0.2); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FUNCTIONS TABLE
+    ═══════════════════════════════════════════════════════════════ */
+    .functions-section { margin-top: 24px; }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .section-title { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; color: var(--text-primary); }
+    .fn-count-badge { padding: 3px 10px; background: rgba(79,156,249,0.12); border: 1px solid rgba(79,156,249,0.2); border-radius: 100px; font-size: 12px; font-weight: 600; color: var(--accent-blue); }
+    .table-wrapper { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.2); }
+    thead th { padding: 12px 20px; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; text-align: left; }
+    tbody tr { border-bottom: 1px solid rgba(99,120,180,0.08); transition: var(--transition); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--bg-card-hover); }
+    tbody td { padding: 14px 20px; font-size: 13px; color: var(--text-secondary); vertical-align: middle; }
+    .fn-name { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500; color: var(--text-primary); }
+    .fn-url-link { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent-cyan); text-decoration: none; transition: var(--transition); display: inline-flex; align-items: center; gap: 4px; }
+    .fn-url-link:hover { color: var(--accent-blue); }
+    .ready-badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 100px; font-size: 11px; font-weight: 600; }
+    .ready-badge.ready     { background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.25); color: var(--accent-green); }
+    .ready-badge.not-ready { background: rgba(251,191,36,0.1);  border: 1px solid rgba(251,191,36,0.25);  color: var(--accent-amber); }
+    .empty-state { text-align: center; padding: 56px 20px; color: var(--text-muted); }
+    .empty-state-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+    .empty-state-text { font-size: 15px; }
+    .empty-state-sub { font-size: 13px; margin-top: 6px; opacity: 0.6; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       HEALTH PANEL
+    ═══════════════════════════════════════════════════════════════ */
+    .health-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-xl); overflow: hidden; margin-top: 24px; }
+    .health-toggle { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; cursor: pointer; user-select: none; transition: var(--transition); }
+    .health-toggle:hover { background: var(--bg-card-hover); }
+    .health-toggle-title { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .chevron { color: var(--text-muted); transition: var(--transition); }
+    .chevron.open { transform: rotate(180deg); }
+    .health-content { display: none; padding: 0 24px 24px; border-top: 1px solid var(--border); }
+    .health-content.open { display: block; }
+    .health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 18px; }
+    .health-item { display: flex; align-items: flex-start; gap: 12px; padding: 14px; background: var(--bg-input); border-radius: var(--radius-md); border: 1px solid var(--border); }
+    .health-item-icon { width: 28px; height: 28px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+    .health-item-icon.ok   { background: rgba(52,211,153,0.12); }
+    .health-item-icon.fail { background: rgba(248,113,113,0.12); }
+    .health-item-icon.warn { background: rgba(251,191,36,0.12);  }
+    .health-item-name   { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 3px; }
+    .health-item-detail { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LANGUAGE TEMPLATE STRIP
+    ═══════════════════════════════════════════════════════════════ */
+    .lang-strip { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+    .lang-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 100px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-muted); transition: var(--transition); }
+    .lang-chip:hover, .lang-chip.active { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(79,156,249,0.08); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TOAST NOTIFICATIONS
+    ═══════════════════════════════════════════════════════════════ */
+    .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+    .toast { padding: 14px 18px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; max-width: 340px; display: flex; align-items: center; gap: 10px; backdrop-filter: blur(20px); animation: toastSlide 0.3s cubic-bezier(0.4,0,0.2,1); border: 1px solid var(--border); }
+    @keyframes toastSlide { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+    .toast.success { background: rgba(52,211,153,0.15); border-color: rgba(52,211,153,0.3); color: var(--accent-green); }
+    .toast.error   { background: rgba(248,113,113,0.15); border-color: rgba(248,113,113,0.3); color: var(--accent-red); }
+    .toast.info    { background: rgba(79,156,249,0.15);  border-color: rgba(79,156,249,0.3);  color: var(--accent-blue); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FOOTER
+    ═══════════════════════════════════════════════════════════════ */
+    .footer { margin-top: 60px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; gap: 12px; }
+    .footer-right { display: flex; gap: 20px; }
+    .footer a { color: var(--text-muted); text-decoration: none; transition: var(--transition); }
+    .footer a:hover { color: var(--accent-blue); }
+  </style>
+</head>
+<body>
+  <!-- ── Toast container ── -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <div class="app-wrapper">
+    <!-- ═══════════════════════════════════════════
+         HEADER
+    ═══════════════════════════════════════════ -->
+    <header class="header">
+      <div class="header-brand">
+        <div class="header-logo" aria-hidden="true">⚡</div>
+        <div>
+          <div class="header-title">VakıfBank FaaS Platform</div>
+          <div class="header-subtitle">Internal Developer Platform</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="status-badge" id="health-toggle-btn" onclick="toggleHealth()" aria-expanded="false" aria-controls="health-panel">
+          <span class="status-dot" id="global-status-dot" aria-hidden="true"></span>
+          <span id="global-status-text">Checking...</span>
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="loadFunctions()" id="refresh-btn" aria-label="Refresh function list">
+          ↻ Refresh
+        </button>
+      </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════
+         HERO
+    ═══════════════════════════════════════════ -->
+    <section class="hero" role="banner">
+      <div class="hero-eyebrow"><span>⚡</span> Powered by Knative + Cloud Native Buildpacks</div>
+      <h1>Deploy Functions<br />at the Speed of Thought</h1>
+      <p class="hero-desc">Paste your code, select a runtime, and go live in minutes. No Dockerfiles. No YAML. No friction.</p>
+    </section>
+
+    <!-- ═══════════════════════════════════════════
+         STATS ROW
+    ═══════════════════════════════════════════ -->
+    <div class="stats-row" role="region" aria-label="Platform statistics">
+      <div class="stat-item">
+        <div class="stat-value" id="stat-deployed">—</div>
+        <div class="stat-label">Functions Deployed</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="stat-ready">—</div>
+        <div class="stat-label">Currently Ready</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">6</div>
+        <div class="stat-label">Supported Runtimes</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value">0</div>
+        <div class="stat-label">Dockerfiles Needed</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
+         MAIN GRID: DEPLOY + LOG
+    ═══════════════════════════════════════════ -->
+    <div class="main-grid" role="main">
+      <!-- ── LEFT: Deploy Form ── -->
+      <div class="card" role="region" aria-labelledby="deploy-card-title">
+        <div class="card-header">
+          <div class="card-title" id="deploy-card-title">
+            <div class="card-icon" aria-hidden="true">🚀</div>
+            Deploy a Function
+          </div>
+        </div>
+
+        <form id="deploy-form" novalidate>
+          <div class="form-row">
+            <div>
+              <label for="fn-name">Function Name</label>
+              <input type="text" id="fn-name" name="fn-name" placeholder="my-function" autocomplete="off" spellcheck="false" pattern="[a-z][a-z0-9\-]{2,49}" required aria-describedby="fn-name-hint" />
+              <div id="fn-name-hint" style="font-size:10px; color:var(--text-muted); margin-top:5px;">Lowercase letters, digits, hyphens. 3–50 chars.</div>
+            </div>
+            <div>
+              <label for="fn-language">Runtime</label>
+              <select id="fn-language" name="fn-language" required aria-label="Select programming language">
+                <option value="python">🐍 Python 3.11</option>
+                <option value="node">🟩 Node.js 18</option>
+                <option value="go">🐹 Go 1.21</option>
+                <option value="typescript">🔷 TypeScript</option>
+                <option value="quarkus">☕ Quarkus (Java)</option>
+                <option value="rust">🦀 Rust</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Code editor -->
+          <div class="form-group">
+            <label for="code-editor-textarea">Function Code</label>
+            <div class="lang-strip" id="template-strip" role="toolbar" aria-label="Code templates">
+              <button type="button" class="lang-chip active" onclick="loadTemplate('python')" data-lang="python">🐍 Python template</button>
+              <button type="button" class="lang-chip" onclick="loadTemplate('node')" data-lang="node">🟩 Node.js template</button>
+              <button type="button" class="lang-chip" onclick="loadTemplate('go')" data-lang="go">🐹 Go template</button>
+              <button type="button" class="lang-chip" onclick="clearEditor()" data-lang="clear">✕ Clear</button>
+            </div>
+            <div class="editor-wrapper">
+              <div class="editor-topbar">
+                <span class="editor-lang-badge" id="editor-lang-label">python · func.py</span>
+                <span class="editor-hint">Ctrl+/ to comment</span>
+              </div>
+              <textarea id="code-editor-textarea" aria-label="Function code editor"></textarea>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="deploy-btn" aria-busy="false">
+            <span id="deploy-btn-icon">⚡</span>
+            <span id="deploy-btn-text">Deploy Function</span>
+          </button>
+        </form>
+
+        <!-- Success result -->
+        <div class="result-card" id="result-card" role="status" aria-live="polite">
+          <div class="result-label">✅ Function Live!</div>
+          <div class="result-url">
+            <span class="result-url-text" id="result-url-text"></span>
+            <button class="copy-btn" onclick="copyUrl()" aria-label="Copy URL to clipboard">Copy</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── RIGHT: Log Stream ── -->
+      <div class="card" role="region" aria-labelledby="log-card-title">
+        <div class="card-header">
+          <div class="card-title" id="log-card-title">
+            <div class="card-icon" aria-hidden="true">📟</div>
+            Build Output
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="clearLogs()" aria-label="Clear log output">Clear</button>
+        </div>
+
+        <div class="log-panel" role="log" aria-live="polite" aria-relevant="additions">
+          <div class="log-topbar">
+            <div class="log-title">
+              <span class="log-status-dot" id="log-status-dot" aria-hidden="true"></span>
+              <span id="log-status-label">Idle</span>
+            </div>
+            <span id="log-line-count" style="font-size:11px;color:var(--text-muted);">0 lines</span>
+          </div>
+          <div class="log-content" id="log-content">
+            <div class="log-placeholder" id="log-placeholder">
+              <div class="log-placeholder-icon" aria-hidden="true">📡</div>
+              <div>Build logs will stream here in real-time</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stage progress -->
+        <div style="margin-top:18px; display:flex; flex-direction:column; gap:8px;" id="stage-indicators" role="list" aria-label="Deployment stages">
+          <div id="stage-scaffold" class="stage-item" style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted);" role="listitem">
+            <span id="stage-scaffold-icon" aria-hidden="true">○</span><span>1 · Scaffold function template</span>
+          </div>
+          <div id="stage-inject" class="stage-item" style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted);" role="listitem">
+            <span id="stage-inject-icon" aria-hidden="true">○</span><span>2 · Inject your code</span>
+          </div>
+          <div id="stage-build" class="stage-item" style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted);" role="listitem">
+            <span id="stage-build-icon" aria-hidden="true">○</span><span>3 · Build &amp; push image (Buildpacks)</span>
+          </div>
+          <div id="stage-ready" class="stage-item" style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-muted);" role="listitem">
+            <span id="stage-ready-icon" aria-hidden="true">○</span><span>4 · Knative Service ready</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
+         FUNCTIONS TABLE
+    ═══════════════════════════════════════════ -->
+    <section class="functions-section" role="region" aria-labelledby="functions-section-title">
+      <div class="section-header">
+        <div class="section-title" id="functions-section-title">
+          <span aria-hidden="true">🌐</span>
+          Deployed Functions
+          <span class="fn-count-badge" id="fn-count-badge">0</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="loadFunctions()" id="refresh-table-btn" aria-label="Refresh deployed functions">↻ Refresh</button>
+      </div>
+      <div class="table-wrapper">
+        <div id="functions-table-container">
+          <div class="empty-state" role="status">
+            <div class="empty-state-icon" aria-hidden="true">🪣</div>
+            <div class="empty-state-text">No functions deployed yet</div>
+            <div class="empty-state-sub">Deploy your first function using the form above</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════
+         HEALTH PANEL
+    ═══════════════════════════════════════════ -->
+    <div class="health-panel" id="health-panel" role="region" aria-label="System health">
+      <div class="health-toggle" onclick="toggleHealth()" role="button" tabindex="0" aria-expanded="false" aria-controls="health-content">
+        <div class="health-toggle-title"><span aria-hidden="true">🛡️</span> System Health</div>
+        <span class="chevron" id="health-chevron" aria-hidden="true">▼</span>
+      </div>
+      <div class="health-content" id="health-content" role="status">
+        <div class="health-grid" id="health-grid">
+          <div style="color:var(--text-muted);font-size:13px;padding:12px 0;">Loading health data...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
+         FOOTER
+    ═══════════════════════════════════════════ -->
+    <footer class="footer">
+      <div>VakıfBank FaaS Platform v1.0 · Built on Knative Serving</div>
+      <div class="footer-right">
+        <a href="/docs" target="_blank" rel="noopener">API Docs</a>
+        <a href="/health" target="_blank" rel="noopener">Health JSON</a>
+        <a href="/functions" target="_blank" rel="noopener">Functions API</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════════
+    // CONFIGURATION
+    // ═══════════════════════════════════════════════════════════════
+    const API_BASE = window.location.origin;
+    let editor = null;
+    let currentLiveUrl = '';
+    let logLineCount = 0;
+
+    // ═══════════════════════════════════════════════════════════════
+    // CODE TEMPLATES
+    // ═══════════════════════════════════════════════════════════════
+    const TEMPLATES = {
+      python: `from parliament import Context
+
+def main(context: Context):
+    """
+    VakıfBank FaaS — Python Function
+    Receives HTTP requests via Knative Serving.
+    """
+    body = context.request.json if context.request.content_type == 'application/json' else {}
+    name = body.get('name', 'World')
+    return {
+        "message": f"Hello, {name}! 👋",
+        "platform": "VakıfBank FaaS",
+        "language": "Python 3.11"
+    }, 200
+`,
+      node: `'use strict';
+
+/**
+ * VakıfBank FaaS — Node.js Function
+ */
+module.exports = async function (context) {
+  const body = context.request.body || {};
+  const name = body.name || 'World';
+  return {
+    message: \`Hello, \${name}! 👋\`,
+    platform: 'VakıfBank FaaS',
+    language: 'Node.js 18',
+  };
+};
+`,
+      go: `package function
+
+import (
+\t"context"
+\t"encoding/json"
+\t"net/http"
+\t"fmt"
+)
+
+func Handle(ctx context.Context, res http.ResponseWriter, req *http.Request) {
+\tvar body struct { Name string \`json:"name"\` }
+\tif err := json.NewDecoder(req.Body).Decode(&body); err != nil || body.Name == "" {
+\t\tbody.Name = "World"
+\t}
+\tres.Header().Set("Content-Type", "application/json")
+\tfmt.Fprintf(res, \`{"message":"Hello, %s! 👋","platform":"VakıfBank FaaS","language":"Go 1.21"}\`, body.Name)
+}
+`,
+    };
+
+    const LANG_META = {
+      python:     { label: 'python · func.py',       mode: 'python' },
+      node:       { label: 'javascript · index.js',   mode: 'javascript' },
+      go:         { label: 'go · handle.go',          mode: 'text/x-go' },
+      typescript: { label: 'typescript · index.ts',   mode: 'javascript' },
+      quarkus:    { label: 'java · Function.java',    mode: null },
+      rust:       { label: 'rust · src/main.rs',      mode: null },
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // INIT
+    // ═══════════════════════════════════════════════════════════════
+    document.addEventListener('DOMContentLoaded', () => {
+      editor = CodeMirror.fromTextArea(document.getElementById('code-editor-textarea'), {
+        mode: 'python', theme: 'dracula', lineNumbers: true,
+        matchBrackets: true, autoCloseBrackets: true,
+        indentUnit: 4, tabSize: 4, indentWithTabs: false, lineWrapping: false,
+        extraKeys: { Tab: (cm) => cm.execCommand('indentMore') },
+      });
+      editor.setValue(TEMPLATES.python);
+
+      document.getElementById('fn-language').addEventListener('change', (e) => {
+        const lang = e.target.value;
+        const meta = LANG_META[lang];
+        document.getElementById('editor-lang-label').textContent = meta?.label || lang;
+        if (meta?.mode) editor.setOption('mode', meta.mode);
+        document.querySelectorAll('.lang-chip[data-lang]').forEach(c => c.classList.toggle('active', c.dataset.lang === lang));
+        if (TEMPLATES[lang]) loadTemplate(lang);
+      });
+
+      checkHealth();
+      loadFunctions();
+      setInterval(loadFunctions, 30000);
+    });
+
+    // ═══════════════════════════════════════════════════════════════
+    // TEMPLATE LOADER
+    // ═══════════════════════════════════════════════════════════════
+    function loadTemplate(lang) {
+      if (lang === 'clear') { clearEditor(); return; }
+      if (TEMPLATES[lang]) editor.setValue(TEMPLATES[lang]);
+      const sel = document.getElementById('fn-language');
+      if ([...sel.options].some(o => o.value === lang)) sel.value = lang;
+      const meta = LANG_META[lang];
+      document.getElementById('editor-lang-label').textContent = meta?.label || lang;
+      if (meta?.mode) editor.setOption('mode', meta.mode);
+      document.querySelectorAll('.lang-chip[data-lang]').forEach(c => c.classList.toggle('active', c.dataset.lang === lang));
+    }
+
+    function clearEditor() {
+      editor.setValue('');
+      editor.focus();
+      document.querySelectorAll('.lang-chip[data-lang]').forEach(c => c.classList.remove('active'));
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // DEPLOY (SSE streaming)
+    // ═══════════════════════════════════════════════════════════════
+    document.getElementById('deploy-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name     = document.getElementById('fn-name').value.trim();
+      const language = document.getElementById('fn-language').value;
+      const code     = editor.getValue().trim();
+
+      if (!name || !language || !code) { showToast('Please fill in all fields and provide your function code.', 'error'); return; }
+      if (!/^[a-z][a-z0-9-]{2,49}$/.test(name)) { showToast('Function name must start with a lowercase letter and contain only letters, digits, and hyphens.', 'error'); return; }
+
+      resetDeployUI();
+      setDeployLoading(true);
+      clearLogs();
+      document.getElementById('result-card').classList.remove('visible');
+      appendLog('step', `🚀 Starting deployment: ${name} (${language})`);
+      appendLog('muted', '─────────────────────────────────────────');
+
+      try {
+        const response = await fetch(`${API_BASE}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, language, code }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ detail: response.statusText }));
+          throw new Error(err.detail || `HTTP ${response.status}`);
+        }
+
+        const reader  = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        setLogStatus('streaming', 'Streaming...');
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+          for (const chunk of parts) {
+            if (!chunk.trim()) continue;
+            let event = 'log', data = '';
+            for (const line of chunk.split('\n')) {
+              if (line.startsWith('event: ')) event = line.slice(7).trim();
+              if (line.startsWith('data: '))  data  = line.slice(6);
+            }
+            handleSSEEvent(event, data, name);
+          }
+        }
+      } catch (err) {
+        appendLog('error', `❌ Request failed: ${err.message}`);
+        setLogStatus('error', 'Error');
+        showToast(`Deployment failed: ${err.message}`, 'error');
+        setDeployLoading(false);
+      }
+    });
+
+    function handleSSEEvent(event, data, fnName) {
+      switch (event) {
+        case 'step':  appendLog('step', data); updateStages(data); break;
+        case 'log':   appendLog('muted', data); break;
+        case 'url':
+          currentLiveUrl = data;
+          document.getElementById('result-url-text').textContent = data;
+          document.getElementById('result-card').classList.add('visible');
+          break;
+        case 'error':
+          appendLog('error', data);
+          setLogStatus('error', 'Failed');
+          setDeployLoading(false);
+          showToast(`Deployment failed: ${data}`, 'error');
+          break;
+        case 'done':
+          try {
+            const payload = JSON.parse(data);
+            if (payload.status === 'success') {
+              appendLog('success', `✅ ${fnName} is live at: ${payload.url}`);
+              setLogStatus('success', 'Complete');
+              showToast(`✅ ${fnName} deployed successfully!`, 'success');
+              setStage('ready', 'done');
+              loadFunctions();
+            } else {
+              setLogStatus('error', 'Failed');
+            }
+          } catch { /* ignore parse error */ }
+          setDeployLoading(false);
+          break;
+        case 'exit_code': break;
+        default: appendLog('muted', data);
+      }
+    }
+
+    function updateStages(stepMsg) {
+      if      (stepMsg.includes('Step 1')) setStage('scaffold', 'active');
+      else if (stepMsg.includes('Step 2')) { setStage('scaffold', 'done'); setStage('inject', 'active'); }
+      else if (stepMsg.includes('Step 3')) { setStage('inject',   'done'); setStage('build',  'active'); }
+      else if (stepMsg.includes('Step 4')) { setStage('build',    'done'); setStage('ready',  'active'); }
+    }
+
+    function setStage(id, state) {
+      const icon = document.getElementById(`stage-${id}-icon`);
+      const item = document.getElementById(`stage-${id}`);
+      if (!icon || !item) return;
+      icon.textContent  = { active: '⟳', done: '✅', error: '❌' }[state] || '○';
+      item.style.color  = { active: 'var(--accent-blue)', done: 'var(--accent-green)', error: 'var(--accent-red)' }[state] || 'var(--text-muted)';
+    }
+
+    function resetDeployUI() {
+      ['scaffold', 'inject', 'build', 'ready'].forEach(s => {
+        const icon = document.getElementById(`stage-${s}-icon`);
+        const item = document.getElementById(`stage-${s}`);
+        if (icon) icon.textContent = '○';
+        if (item) item.style.color = 'var(--text-muted)';
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // LOG HELPERS
+    // ═══════════════════════════════════════════════════════════════
+    function appendLog(type, text) {
+      const content     = document.getElementById('log-content');
+      const placeholder = document.getElementById('log-placeholder');
+      if (placeholder) placeholder.remove();
+      const line = document.createElement('p');
+      line.className = `log-line ${type}`;
+      line.textContent = text;
+      content.appendChild(line);
+      content.scrollTop = content.scrollHeight;
+      logLineCount++;
+      document.getElementById('log-line-count').textContent = `${logLineCount} lines`;
+    }
+
+    function clearLogs() {
+      document.getElementById('log-content').innerHTML = `
+        <div class="log-placeholder" id="log-placeholder">
+          <div class="log-placeholder-icon" aria-hidden="true">📡</div>
+          <div>Build logs will stream here in real-time</div>
+        </div>`;
+      logLineCount = 0;
+      document.getElementById('log-line-count').textContent = '0 lines';
+      setLogStatus('', 'Idle');
+    }
+
+    function setLogStatus(type, label) {
+      document.getElementById('log-status-dot').className = `log-status-dot ${type}`;
+      document.getElementById('log-status-label').textContent = label;
+    }
+
+    function setDeployLoading(loading) {
+      const btn  = document.getElementById('deploy-btn');
+      const icon = document.getElementById('deploy-btn-icon');
+      const text = document.getElementById('deploy-btn-text');
+      btn.disabled = loading;
+      btn.setAttribute('aria-busy', loading);
+      if (loading) { icon.className = 'spinner'; text.textContent = 'Deploying...'; }
+      else         { icon.className = ''; icon.textContent = '⚡'; text.textContent = 'Deploy Function'; }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // FUNCTIONS TABLE
+    // ═══════════════════════════════════════════════════════════════
+    async function loadFunctions() {
+      try {
+        const res  = await fetch(`${API_BASE}/functions`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        renderFunctionsTable(data.functions || []);
+      } catch (err) { console.error('Failed to load functions:', err); }
+    }
+
+    function renderFunctionsTable(functions) {
+      const container   = document.getElementById('functions-table-container');
+      document.getElementById('fn-count-badge').textContent   = functions.length;
+      document.getElementById('stat-deployed').textContent    = functions.length;
+      document.getElementById('stat-ready').textContent       = functions.filter(f => f.ready).length;
+
+      if (functions.length === 0) {
+        container.innerHTML = `<div class="empty-state" role="status"><div class="empty-state-icon" aria-hidden="true">🪣</div><div class="empty-state-text">No functions deployed yet</div><div class="empty-state-sub">Deploy your first function using the form above</div></div>`;
+        return;
+      }
+
+      const rows = functions.map(fn => {
+        const readyCls  = fn.ready ? 'ready' : 'not-ready';
+        const readyLabel = fn.ready ? '● Ready' : '◌ Pending';
+        const urlCell   = fn.url ? `<a class="fn-url-link" href="${fn.url}" target="_blank" rel="noopener">${fn.url} ↗</a>` : '<span style="color:var(--text-muted)">—</span>';
+        const created   = fn.created_at ? new Date(fn.created_at).toLocaleString() : '—';
+        return `<tr>
+          <td><span class="fn-name">${escHtml(fn.name)}</span></td>
+          <td>${urlCell}</td>
+          <td><span class="ready-badge ${readyCls}" role="status">${readyLabel}</span></td>
+          <td>${escHtml(created)}</td>
+          <td><button class="btn btn-danger" onclick="deleteFunction('${escHtml(fn.name)}')" aria-label="Delete function ${escHtml(fn.name)}">Delete</button></td>
+        </tr>`;
+      }).join('');
+
+      container.innerHTML = `<table><thead><tr><th scope="col">Name</th><th scope="col">Live URL</th><th scope="col">Status</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    async function deleteFunction(name) {
+      if (!confirm(`Delete function "${name}"? This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`${API_BASE}/functions/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        showToast(`✅ Function "${name}" deleted.`, 'success');
+        await loadFunctions();
+      } catch (err) { showToast(`Failed to delete "${name}": ${err.message}`, 'error'); }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // HEALTH PANEL
+    // ═══════════════════════════════════════════════════════════════
+    async function checkHealth() {
+      const dot  = document.getElementById('global-status-dot');
+      const text = document.getElementById('global-status-text');
+      try {
+        const res  = await fetch(`${API_BASE}/health`);
+        const data = await res.json();
+        const ok   = data.status === 'healthy';
+        dot.className    = `status-dot ${ok ? 'healthy' : 'degraded'}`;
+        text.textContent = ok ? 'All systems OK' : 'Degraded';
+        renderHealthGrid(data.tools || {});
+      } catch {
+        dot.className    = 'status-dot error';
+        text.textContent = 'Unreachable';
+        document.getElementById('health-grid').innerHTML = '<div style="color:var(--accent-red);font-size:13px;padding:12px 0;">Cannot reach backend API.</div>';
+      }
+    }
+
+    function renderHealthGrid(tools) {
+      const grid = document.getElementById('health-grid');
+      if (!tools || Object.keys(tools).length === 0) { grid.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">No health data available.</div>'; return; }
+      grid.innerHTML = Object.entries(tools).map(([name, info]) => {
+        const ok      = info.found;
+        const iconCls = ok ? 'ok' : (info.critical ? 'fail' : 'warn');
+        const icon    = ok ? '✅' : (info.critical ? '❌' : '⚠️');
+        const detail  = ok ? (info.version || 'found') : (info.error || 'not found');
+        return `<div class="health-item"><div class="health-item-icon ${iconCls}" aria-hidden="true">${icon}</div><div><div class="health-item-name">${escHtml(name)}</div><div class="health-item-detail">${escHtml(detail)}</div></div></div>`;
+      }).join('');
+    }
+
+    function toggleHealth() {
+      const content = document.getElementById('health-content');
+      const chevron = document.getElementById('health-chevron');
+      const btn     = document.getElementById('health-toggle-btn');
+      const isOpen  = content.classList.toggle('open');
+      chevron.classList.toggle('open', isOpen);
+      btn.setAttribute('aria-expanded', isOpen);
+      if (isOpen) checkHealth();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // URL COPY
+    // ═══════════════════════════════════════════════════════════════
+    async function copyUrl() {
+      const url = document.getElementById('result-url-text').textContent;
+      try { await navigator.clipboard.writeText(url); showToast('📋 URL copied to clipboard!', 'info'); }
+      catch { showToast('Press Ctrl+C to copy.', 'info'); }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // TOAST NOTIFICATIONS
+    // ═══════════════════════════════════════════════════════════════
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast     = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.setAttribute('role', 'alert');
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4500);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // UTILS
+    // ═══════════════════════════════════════════════════════════════
+    function escHtml(str) {
+      const d = document.createElement('div');
+      d.appendChild(document.createTextNode(String(str)));
+      return d.innerHTML;
+    }
+  </script>
+</body>
+</html>

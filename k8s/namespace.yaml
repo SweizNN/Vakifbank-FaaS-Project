@@ -1,0 +1,110 @@
+# ============================================================
+#  Vakifbank-FaaS-Project/k8s/namespace.yaml
+#  Namespaces, RBAC, and ResourceQuota for the FaaS Platform
+# ============================================================
+
+# ── Namespace: faas-platform ──────────────────────────────────────────────────
+# Hosts the FastAPI orchestrator and frontend
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: faas-platform
+  labels:
+    app.kubernetes.io/managed-by: "faas-platform"
+    environment: "production"
+
+---
+# ── Namespace: tenant-functions ───────────────────────────────────────────────
+# Strictly isolated namespace for user-deployed Knative functions.
+# Functions are auto-deployed here by the orchestrator, never by users directly.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-functions
+  labels:
+    app.kubernetes.io/managed-by: "faas-platform"
+    purpose: "tenant-isolation"
+    # Required by Knative Serving for function deployments
+    knative.dev/serving: "true"
+
+---
+# ── ResourceQuota: tenant-functions ──────────────────────────────────────────
+# Generous limits matching the 4 vCPU / 8 GB DigitalOcean Droplet.
+# No per-pod limits are set (as specified), only namespace-wide totals.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tenant-functions-quota
+  namespace: tenant-functions
+spec:
+  hard:
+    pods:                "50"
+    services:            "50"
+    # No CPU/Memory limits per the project spec — server has enough capacity
+
+---
+# ── ServiceAccount for FastAPI Orchestrator ───────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: faas-orchestrator
+  namespace: faas-platform
+  labels:
+    app: faas-platform-api
+
+---
+# ── ClusterRole: Manage Knative Services in tenant-functions ──────────────────
+# Grants the orchestrator permission to CRUD Knative services and read pod logs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: faas-orchestrator-role
+  labels:
+    app: faas-platform-api
+rules:
+  # Knative Serving — Services (ksvc)
+  - apiGroups: ["serving.knative.dev"]
+    resources: ["services", "revisions", "routes", "configurations"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Core — Pods and Logs
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+
+  # Core — Namespaces (for health checks)
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+
+  # Core — Services (Kubernetes Services, not Knative)
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+
+  # Apps — Deployments (for health checks)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
+
+  # CRDs check (for Knative health check)
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list"]
+
+---
+# ── ClusterRoleBinding: Bind role to the ServiceAccount ──────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: faas-orchestrator-binding
+  labels:
+    app: faas-platform-api
+subjects:
+  - kind: ServiceAccount
+    name: faas-orchestrator
+    namespace: faas-platform
+roleRef:
+  kind: ClusterRole
+  name: faas-orchestrator-role
+  apiGroup: rbac.authorization.k8s.io
