@@ -95,8 +95,14 @@ async def serve_frontend():
     )
 
 
-@app.get("/health", summary="System health check")
+@app.get("/health", summary="Kubernetes liveness/readiness probe")
 async def health_check():
+    """Lightweight health check for Kubernetes probes. Always returns 200 instantly."""
+    return {"status": "ok"}
+
+
+@app.get("/health/detail", summary="Full system health check")
+async def health_check_detail():
     """Run all tool and cluster checks. Returns tool statuses + config."""
     results = run_all_checks()
     overall_ok = all(i["found"] for i in results.values() if i["critical"])
