@@ -222,13 +222,13 @@ jobs:
             ufw allow 80/tcp || true
             ufw allow 443/tcp || true
 
-            # ── 1. Verify Kubernetes is running ───────────────────────
-            if ! kubectl cluster-info --request-timeout=10s &>/dev/null; then
-              echo "❌ ERROR: kubectl cannot reach the cluster. Is Minikube/Kubernetes running?"
-              echo "   Check: minikube status"
-              exit 1
+            # ── 1. Ensure Minikube cluster is running ─────────────────
+            if ! minikube status &>/dev/null; then
+              echo "⚠️ Minikube is not running. Starting Minikube..."
+              minikube start --driver=docker --force --cpus=4 --memory=4096
+            else
+              echo "✅ Minikube is running."
             fi
-            echo "✅ Kubernetes cluster is reachable."
 
             # ── 2. Verify Knative Serving is installed ─────────────────
             if ! kubectl get ns knative-serving &>/dev/null; then
@@ -279,13 +279,18 @@ jobs:
             sed -e "s|image: .*/faas-platform-api:.*|image: ${DOCKER_HUB_USER}/faas-platform-api:${IMAGE_TAG}|g" \
               k8s/deployment.yaml | kubectl apply -f -
 
-            # ── 7. Wait for rollout ────────────────────────────────────────────
-            echo "⏳ Waiting for rollout (up to 10 min)..."
-            kubectl rollout status deployment/faas-platform-api \
-              -n faas-platform \
-              --timeout=600s
+            # ── 7. Verify Rollout Status ──────────────────────────────
+            echo "⏳ Waiting for pod rollout..."
+            kubectl rollout status deployment/faas-platform-api -n faas-platform --timeout=600s
+            echo "✅ Deployment successful!"
 
-            # ── 8. Verify pods are running ─────────────────────────────
+            # ── 8. Setup Port-Forwarding (Robust Docker Socat Proxy) ──
+            echo "🔌 Setting up Port-Forwarding for external access..."
+            MINIKUBE_IP=$(minikube ip)
+            docker rm -f faas-api-proxy || true
+            docker run -d --restart always --name faas-api-proxy --network host alpine/socat TCP-LISTEN:30081,fork,reuseaddr TCP:${MINIKUBE_IP}:30081
+
+            # ── 9. Verify pods are running ─────────────────────────────
             echo ""
             echo "📊 Current pod status:"
             kubectl get pods -n faas-platform -o wide
