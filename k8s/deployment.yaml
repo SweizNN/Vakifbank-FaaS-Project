@@ -144,7 +144,7 @@ spec:
           volumeMounts:
             # Docker Hub credentials for func deploy image push
             - name: docker-config
-              mountPath: /home/faas/.docker
+              mountPath: /root/.docker
               readOnly: true
             - name: docker-socket
               mountPath: /var/run/docker.sock
