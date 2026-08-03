@@ -235,10 +235,18 @@ jobs:
             kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.14.0/serving-crds.yaml
             kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.14.0/serving-core.yaml
             kubectl apply -f https://github.com/knative/net-kourier/releases/download/knative-v1.14.0/kourier.yaml
-            kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.14.0/serving-default-domain.yaml
             
             kubectl patch configmap/config-network -n knative-serving \
               --type merge --patch '{"data":{"ingress-class":"kourier.ingress.networking.knative.dev"}}'
+
+            # Patch Kourier Service to use NodePort 31080 for HTTP so we can proxy it
+            kubectl patch svc kourier -n kourier-system \
+              --type merge -p '{"spec": {"type": "NodePort", "ports": [{"port": 80, "targetPort": 8080, "nodePort": 31080, "name": "http2"}]}}' || true
+
+            # Manually configure Magic DNS since Minikube doesn't provide an External IP automatically
+            DROPLET_IP="${{ secrets.DO_DROPLET_IP }}"
+            kubectl patch configmap/config-domain -n knative-serving \
+              --type merge --patch "{\"data\": {\"${DROPLET_IP}.sslip.io\": \"\"}}"
 
             # ── 3. Clone or update the repository ─────────────────────
             if [ ! -d "$PROJECT_DIR" ]; then
@@ -299,8 +307,13 @@ jobs:
             # ── 8. Setup Port-Forwarding (Robust Docker Socat Proxy) ──
             echo "🔌 Setting up Port-Forwarding for external access..."
             MINIKUBE_IP=$(minikube ip)
+            # Proxy for FaaS Platform API
             docker rm -f faas-api-proxy || true
             docker run -d --restart always --name faas-api-proxy --network host alpine/socat TCP-LISTEN:30081,fork,reuseaddr TCP:${MINIKUBE_IP}:30081
+
+            # Proxy for Knative Kourier Gateway (Functions)
+            docker rm -f kourier-proxy || true
+            docker run -d --restart always --name kourier-proxy --network host alpine/socat TCP-LISTEN:80,fork,reuseaddr TCP:${MINIKUBE_IP}:31080
 
             # ── 9. Verify pods are running ─────────────────────────────
             echo ""
