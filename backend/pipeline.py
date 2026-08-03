@@ -97,23 +97,6 @@ async def stream_subprocess(
         await asyncio.sleep(0.05)
 
 
-# ── Exit-code parser ──────────────────────────────────────────────────────────
-
-
-def _parse_exit_code(sse_frames: list[str]) -> int:
-    """Extract exit code from the last exit_code SSE frame in a list."""
-    for frame in reversed(sse_frames):
-        for line in frame.split("\n"):
-            if line.startswith("event: exit_code"):
-                # next line will be `data: <int>`
-                pass
-            if line.startswith("data: ") and frame.count("exit_code") > 0:
-                try:
-                    return int(line[6:].strip())
-                except ValueError:
-                    pass
-    return -1
-
 
 # ── Core deploy pipeline ──────────────────────────────────────────────────────
 
@@ -162,44 +145,45 @@ async def deploy_pipeline(
         entrypoint.write_text(req.code, encoding="utf-8")
         yield sse_event("log", f"   → Wrote {len(req.code)} bytes to {entrypoint.name}")
 
-        if True: # Always process YAML to inject annotations
-            yield sse_event("step", "⚙️  Step 2.5/4 — Applying Configuration & Saving State")
-            try:
-                import yaml
-                import base64
-                user_cfg = yaml.safe_load(req.config_yaml) or {} if req.config_yaml else {}
-                func_yaml_path = fn_dir / "func.yaml"
-                
-                if func_yaml_path.exists():
-                    func_cfg = yaml.safe_load(func_yaml_path.read_text(encoding="utf-8")) or {}
-                    
-                    if "envs" in user_cfg:
-                        func_cfg.setdefault("envs", []).extend(user_cfg["envs"])
-                    if "options" in user_cfg:
-                        func_cfg.setdefault("options", {}).update(user_cfg["options"])
-                        
-                    # Save state in annotations
-                    if "annotations" not in func_cfg or not isinstance(func_cfg["annotations"], dict):
-                        func_cfg["annotations"] = {}
-                        
-                    encoded_code = base64.b64encode(req.code.encode("utf-8")).decode("utf-8")
-                    func_cfg["annotations"]["faas.vakifbank.com/code-b64"] = encoded_code
-                    func_cfg["annotations"]["faas.vakifbank.com/lang"] = req.language
-                    
-                    if req.config_yaml:
-                        encoded_yaml = base64.b64encode(req.config_yaml.encode("utf-8")).decode("utf-8")
-                        func_cfg["annotations"]["faas.vakifbank.com/yaml-b64"] = encoded_yaml
-                    elif "faas.vakifbank.com/yaml-b64" in func_cfg["annotations"]:
-                        del func_cfg["annotations"]["faas.vakifbank.com/yaml-b64"]
-                        
-                    func_yaml_path.write_text(yaml.safe_dump(func_cfg), encoding="utf-8")
-                    yield sse_event("log", "   → Successfully injected config & state into func.yaml")
-                else:
-                    yield sse_event("log", "   → Warning: func.yaml not found, skipping config merge.")
-            except Exception as e:
-                yield sse_event("error", f"❌ Failed to parse or apply YAML config: {str(e)}")
-                yield sse_event("done", json.dumps({"status": "error", "job_id": job_id}))
-                return
+        # ── Step 2.5: Apply YAML config & save source state in annotations ──
+        yield sse_event("step", "⚙️  Step 2.5/4 — Applying Configuration & Saving State")
+        try:
+            import yaml
+            import base64
+            user_cfg = yaml.safe_load(req.config_yaml) or {} if req.config_yaml else {}
+            func_yaml_path = fn_dir / "func.yaml"
+
+            if func_yaml_path.exists():
+                func_cfg = yaml.safe_load(func_yaml_path.read_text(encoding="utf-8")) or {}
+
+                if "envs" in user_cfg:
+                    func_cfg.setdefault("envs", []).extend(user_cfg["envs"])
+                if "options" in user_cfg:
+                    func_cfg.setdefault("options", {}).update(user_cfg["options"])
+
+                # Save state in annotations for later Edit/Revision support
+                if "annotations" not in func_cfg or not isinstance(func_cfg["annotations"], dict):
+                    func_cfg["annotations"] = {}
+
+                encoded_code = base64.b64encode(req.code.encode("utf-8")).decode("utf-8")
+                func_cfg["annotations"]["faas.vakifbank.com/code-b64"] = encoded_code
+                func_cfg["annotations"]["faas.vakifbank.com/lang"] = req.language
+
+                if req.config_yaml:
+                    encoded_yaml = base64.b64encode(req.config_yaml.encode("utf-8")).decode("utf-8")
+                    func_cfg["annotations"]["faas.vakifbank.com/yaml-b64"] = encoded_yaml
+                elif "faas.vakifbank.com/yaml-b64" in func_cfg["annotations"]:
+                    del func_cfg["annotations"]["faas.vakifbank.com/yaml-b64"]
+
+                func_yaml_path.write_text(yaml.safe_dump(func_cfg), encoding="utf-8")
+                yield sse_event("log", "   → Successfully injected config & state into func.yaml")
+            else:
+                yield sse_event("log", "   → Warning: func.yaml not found, skipping config merge.")
+        except Exception as e:
+            yield sse_event("error", f"❌ Failed to parse or apply YAML config: {str(e)}")
+            yield sse_event("done", json.dumps({"status": "error", "job_id": job_id}))
+            return
+
 
         # ── Step 3: func deploy ────────────────────────────────────────────
         fn_image = f"{REGISTRY_PREFIX}/faas-fn-{req.name}"

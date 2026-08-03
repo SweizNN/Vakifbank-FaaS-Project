@@ -16,6 +16,9 @@ import re
 import uuid
 import sys
 import asyncio
+import subprocess
+import json
+import base64
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -147,7 +150,7 @@ async def deploy_function(req: DeployRequest):
     
     # 🚨 Duplicate name check
     if not req.is_update:
-        existing_funcs = list_ksvc()
+        existing_funcs = list_ksvc(TENANT_NAMESPACE)
         if any(f.get("name") == req.name for f in existing_funcs):
             raise HTTPException(
                 status_code=409,
@@ -187,14 +190,14 @@ async def get_functions():
 @app.get("/functions/{name}/code", summary="Get function code and config")
 async def get_function_code(name: str):
     """Retrieve base64 encoded source code and config from ksvc annotations."""
-    import subprocess
-    import json
-    import base64
     try:
         cmd = ["kubectl", "get", "ksvc", name, "-n", TENANT_NAMESPACE, "-o", "json"]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        ksvc = json.loads(result.stdout)
+        result = subprocess.run(cmd, capture_output=True, text=True)
         
+        if result.returncode != 0:
+            raise HTTPException(status_code=404, detail=f"Function '{name}' not found in cluster.")
+        
+        ksvc = json.loads(result.stdout)
         annotations = ksvc.get("metadata", {}).get("annotations", {})
         
         code_b64 = annotations.get("faas.vakifbank.com/code-b64", "")
@@ -202,7 +205,11 @@ async def get_function_code(name: str):
         yaml_b64 = annotations.get("faas.vakifbank.com/yaml-b64", "")
         
         if not code_b64:
-            raise HTTPException(status_code=404, detail="Code not found in function annotations.")
+            # This function was deployed before the Edit feature existed
+            raise HTTPException(
+                status_code=422,
+                detail=f"Function '{name}' was deployed before the Edit feature was added. Please delete and re-deploy it to enable editing."
+            )
             
         code = base64.b64decode(code_b64).decode("utf-8")
         config_yaml = base64.b64decode(yaml_b64).decode("utf-8") if yaml_b64 else ""
@@ -213,10 +220,11 @@ async def get_function_code(name: str):
             "code": code,
             "config_yaml": config_yaml
         }
-    except subprocess.CalledProcessError:
-        raise HTTPException(status_code=404, detail=f"Function '{name}' not found.")
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is, don't wrap them
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("[get_function_code] Unexpected error for '%s': %s", name, e)
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
 @app.delete("/functions/{name}", response_model=DeleteResponse, summary="Delete a function")
@@ -300,5 +308,5 @@ async def proxy_request(req: ProxyRequest):
     try:
         resp_json = json.loads(body_bytes)
         return {"status": status, "body": resp_json}
-    except:
+    except json.JSONDecodeError:
         return {"status": status, "body": body_bytes.decode('utf-8')}

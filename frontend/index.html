@@ -2149,7 +2149,19 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
     async function editFunction(name) {
       try {
         const res = await fetch(`${API_BASE}/functions/${encodeURIComponent(name)}/code`);
-        if (!res.ok) throw new Error(`Could not fetch code. Status: ${res.status}`);
+        
+        if (res.status === 422) {
+          showToast(`⚠️ '${name}' Edit özelliği eklenmeden önce deploy edildi. Silinip yeniden deploy edilmeli.`, 'warn');
+          return;
+        }
+        if (res.status === 404) {
+          showToast(`❌ '${name}' bulunamadı.`, 'error');
+          return;
+        }
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `HTTP ${res.status}`);
+        }
         
         const data = await res.json();
         
