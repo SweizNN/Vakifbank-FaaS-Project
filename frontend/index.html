@@ -1798,10 +1798,16 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
       document.querySelectorAll('.lang-chip[data-lang]').forEach(c => c.classList.toggle('active', c.dataset.lang === lang));
     }
 
+    let isUpdateMode = false;
+
     function clearEditor() {
       editor.setValue('');
       editor.focus();
       document.querySelectorAll('.lang-chip[data-lang]').forEach(c => c.classList.remove('active'));
+      isUpdateMode = false;
+      const fnNameInput = document.getElementById('fn-name');
+      fnNameInput.disabled = false;
+      document.getElementById('deploy-btn-text').textContent = 'Deploy Function';
     }
     
     function handleFileUpload(event) {
@@ -1878,7 +1884,7 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
         const response = await fetch(`${API_BASE}/deploy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, language, code: wrapCode(language, code), config_yaml }),
+          body: JSON.stringify({ name, language, code: wrapCode(language, code), config_yaml, is_update: isUpdateMode }),
         });
 
         if (!response.ok) {
@@ -2055,6 +2061,7 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
           <td><span class="ready-badge ${readyCls}" role="status">${readyLabel}</span></td>
           <td>${escHtml(created)}</td>
           <td style="display:flex; gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="editFunction('${escHtml(fn.name)}')" aria-label="Edit">✏️ Edit</button>
             <button class="btn btn-ghost btn-sm" onclick="openTestModal('${escHtml(fn.url || '')}', '${escHtml(fn.name)}')" aria-label="Test">Test</button>
             <button class="btn btn-ghost btn-sm" onclick="copyCurl('${escHtml(fn.url || '')}')" aria-label="cURL">cURL</button>
             <button class="btn btn-danger btn-sm" onclick="deleteFunction('${escHtml(fn.name)}')" aria-label="Delete">Delete</button>
@@ -2137,6 +2144,43 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
         showToast(`✅ Function "${name}" deleted.`, 'success');
         await loadFunctions();
       } catch (err) { showToast(`Failed to delete "${name}": ${err.message}`, 'error'); }
+    }
+
+    async function editFunction(name) {
+      try {
+        const res = await fetch(`${API_BASE}/functions/${encodeURIComponent(name)}/code`);
+        if (!res.ok) throw new Error(`Could not fetch code. Status: ${res.status}`);
+        
+        const data = await res.json();
+        
+        // Populate fields
+        const nameInput = document.getElementById('fn-name');
+        nameInput.value = data.name;
+        nameInput.disabled = true; // Lock name during update
+        
+        const langInput = document.getElementById('fn-language');
+        langInput.value = data.language || 'python';
+        langInput.dispatchEvent(new Event('change'));
+        
+        setTimeout(() => {
+          editor.setValue(data.code || '');
+          const yamlEditor = document.getElementById('yaml-config-editor');
+          if (data.config_yaml) {
+            yamlEditor.value = data.config_yaml;
+            document.querySelector('details').open = true;
+          } else {
+            yamlEditor.value = '';
+          }
+          
+          isUpdateMode = true;
+          document.getElementById('deploy-btn-text').textContent = 'Update Function';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          showToast(`✏️ Editing function '${name}'`, 'info');
+        }, 100);
+        
+      } catch (err) {
+        showToast(`Failed to edit function: ${err.message}`, 'error');
+      }
     }
 
     // ═══════════════════════════════════════════════════════════════

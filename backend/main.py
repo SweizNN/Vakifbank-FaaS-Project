@@ -144,6 +144,16 @@ async def deploy_function(req: DeployRequest):
       error     — error message (on failure)
       exit_code — raw process exit code
     """
+    
+    # 🚨 Duplicate name check
+    if not req.is_update:
+        existing_funcs = list_ksvc()
+        if any(f.get("name") == req.name for f in existing_funcs):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Function '{req.name}' already exists! Please choose a different name or use Update mode."
+            )
+
     job_id = str(uuid.uuid4())[:8]
     work_dir = WORKSPACE_BASE / f"{job_id}-{req.name}"
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -165,7 +175,6 @@ async def deploy_function(req: DeployRequest):
 @app.get("/functions", summary="List deployed functions")
 async def get_functions():
     """List all Knative Services in the tenant-functions namespace."""
-    # Quick cluster reachability check before calling list_ksvc
     probe = kubectl("get", "namespace", TENANT_NAMESPACE, "--no-headers", timeout=10)
     if probe.returncode != 0:
         raise HTTPException(
@@ -173,6 +182,41 @@ async def get_functions():
             detail=f"Cannot reach cluster: {probe.stderr.strip()[:200]}",
         )
     return {"functions": list_ksvc(TENANT_NAMESPACE), "namespace": TENANT_NAMESPACE}
+
+
+@app.get("/functions/{name}/code", summary="Get function code and config")
+async def get_function_code(name: str):
+    """Retrieve base64 encoded source code and config from ksvc annotations."""
+    import subprocess
+    import json
+    import base64
+    try:
+        cmd = ["kubectl", "get", "ksvc", name, "-n", TENANT_NAMESPACE, "-o", "json"]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        ksvc = json.loads(result.stdout)
+        
+        annotations = ksvc.get("metadata", {}).get("annotations", {})
+        
+        code_b64 = annotations.get("faas.vakifbank.com/code-b64", "")
+        lang = annotations.get("faas.vakifbank.com/lang", "")
+        yaml_b64 = annotations.get("faas.vakifbank.com/yaml-b64", "")
+        
+        if not code_b64:
+            raise HTTPException(status_code=404, detail="Code not found in function annotations.")
+            
+        code = base64.b64decode(code_b64).decode("utf-8")
+        config_yaml = base64.b64decode(yaml_b64).decode("utf-8") if yaml_b64 else ""
+        
+        return {
+            "name": name,
+            "language": lang,
+            "code": code,
+            "config_yaml": config_yaml
+        }
+    except subprocess.CalledProcessError:
+        raise HTTPException(status_code=404, detail=f"Function '{name}' not found.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.delete("/functions/{name}", response_model=DeleteResponse, summary="Delete a function")

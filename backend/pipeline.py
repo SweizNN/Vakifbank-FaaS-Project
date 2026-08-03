@@ -162,23 +162,38 @@ async def deploy_pipeline(
         entrypoint.write_text(req.code, encoding="utf-8")
         yield sse_event("log", f"   → Wrote {len(req.code)} bytes to {entrypoint.name}")
 
-        if req.config_yaml:
-            yield sse_event("step", "⚙️  Step 2.5/4 — Applying Advanced YAML Configuration")
+        if True: # Always process YAML to inject annotations
+            yield sse_event("step", "⚙️  Step 2.5/4 — Applying Configuration & Saving State")
             try:
                 import yaml
-                user_cfg = yaml.safe_load(req.config_yaml) or {}
+                import base64
+                user_cfg = yaml.safe_load(req.config_yaml) or {} if req.config_yaml else {}
                 func_yaml_path = fn_dir / "func.yaml"
+                
                 if func_yaml_path.exists():
                     func_cfg = yaml.safe_load(func_yaml_path.read_text(encoding="utf-8")) or {}
                     
                     if "envs" in user_cfg:
                         func_cfg.setdefault("envs", []).extend(user_cfg["envs"])
-                    
                     if "options" in user_cfg:
                         func_cfg.setdefault("options", {}).update(user_cfg["options"])
                         
+                    # Save state in annotations
+                    if "annotations" not in func_cfg or not isinstance(func_cfg["annotations"], dict):
+                        func_cfg["annotations"] = {}
+                        
+                    encoded_code = base64.b64encode(req.code.encode("utf-8")).decode("utf-8")
+                    func_cfg["annotations"]["faas.vakifbank.com/code-b64"] = encoded_code
+                    func_cfg["annotations"]["faas.vakifbank.com/lang"] = req.language
+                    
+                    if req.config_yaml:
+                        encoded_yaml = base64.b64encode(req.config_yaml.encode("utf-8")).decode("utf-8")
+                        func_cfg["annotations"]["faas.vakifbank.com/yaml-b64"] = encoded_yaml
+                    elif "faas.vakifbank.com/yaml-b64" in func_cfg["annotations"]:
+                        del func_cfg["annotations"]["faas.vakifbank.com/yaml-b64"]
+                        
                     func_yaml_path.write_text(yaml.safe_dump(func_cfg), encoding="utf-8")
-                    yield sse_event("log", "   → Successfully merged custom configuration into func.yaml")
+                    yield sse_event("log", "   → Successfully injected config & state into func.yaml")
                 else:
                     yield sse_event("log", "   → Warning: func.yaml not found, skipping config merge.")
             except Exception as e:

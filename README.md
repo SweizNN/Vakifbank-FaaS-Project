@@ -1,6 +1,6 @@
 # VakıfBank FaaS Platform — Internal Developer Platform
 
-A custom, platform-agnostic **Function-as-a-Service (FaaS)** environment built on **Kubernetes (k3s)**, **Knative Serving**, and the **Knative `func` CLI**. Developers paste raw code into a web UI, select a runtime, and receive a live HTTPS URL — no Dockerfiles, no YAML, no friction.
+A custom, platform-agnostic **Function-as-a-Service (FaaS)** environment built on **Kubernetes**, **Knative Serving**, and the **Knative `func` CLI**. Developers paste raw code into a web UI, select a runtime, and receive a live HTTPS URL — no Dockerfiles, no YAML, no friction.
 
 ---
 
@@ -78,48 +78,26 @@ Vakifbank-FaaS-Project/
 
 ---
 
-## Phase 1 — Local Development
 
-### Running on Windows
+## Production Deployment (CI/CD)
 
-The easiest way to start the project locally on Windows is using the provided PowerShell script. It automatically sets up the Python environment, installs dependencies, runs a system check, and starts the server.
+###  One-Click Deployment Methods
 
-Open PowerShell or VS Code Terminal in the project root:
+FaaS Platform uses a modern GitOps approach. You do **not** need to manually download the repository or install dependencies individually.
 
-```powershell
-.\scripts\run_local.ps1
-```
-
-Once running, open your browser at:
-👉 `http://localhost:8000`
-
-*Note: If you get a PowerShell script execution error, you may need to run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first.*
-
----
-
-## Phase 2 — Production Deployment (CI/CD)
-
-### One-Time Server Setup
-
-SSH into the DigitalOcean Droplet and ensure the following are installed:
+#### 1. Fresh Server Install (Zero to Hero)
+If you have a brand new, empty Ubuntu server (e.g. a DigitalOcean Droplet), you can install Kubernetes, Knative, and deploy the entire FaaS platform with this single command:
 
 ```bash
-# k3s (lightweight Kubernetes)
-curl -sfL https://get.k3s.io | sh -
+curl -sL https://raw.githubusercontent.com/<YOUR_GITHUB_USERNAME>/Vakifbank-FaaS-Project/main/setup_server.sh | bash
+```
+*(⚠️ Don't forget to replace `<YOUR_GITHUB_USERNAME>` with your actual GitHub username!)*
 
-# Knative Serving CRDs + core
-kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.14.0/serving-crds.yaml
-kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.14.0/serving-core.yaml
+#### 2. Manual Update (Kustomize / GitOps)
+If the server is already running and you just want to pull your latest configuration changes directly from GitHub without triggering CI/CD, run:
 
-# Kourier Ingress
-kubectl apply -f https://github.com/knative/net-kourier/releases/download/knative-v1.14.0/kourier.yaml
-kubectl patch configmap/config-network -n knative-serving \
-  --type merge --patch '{"data":{"ingress-class":"kourier.ingress.networking.knative.dev"}}'
-
-# Knative func CLI
-FUNC_VERSION=$(curl -sSL https://api.github.com/repos/knative/func/releases/latest | grep tag_name | sed -E 's/.*"([^"]+)".*/\1/')
-curl -sSL "https://github.com/knative/func/releases/download/${FUNC_VERSION}/func_linux_amd64" \
-  -o /usr/local/bin/func && chmod +x /usr/local/bin/func
+```bash
+kubectl apply -k https://github.com/<YOUR_GITHUB_USERNAME>/Vakifbank-FaaS-Project/k8s
 ```
 
 ### Deploy via GitHub Actions
