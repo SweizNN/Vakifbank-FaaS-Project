@@ -1798,7 +1798,7 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
         const response = await fetch(`${API_BASE}/deploy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, language, code }),
+          body: JSON.stringify({ name, language, code: wrapCode(language, code) }),
         });
 
         if (!response.ok) {
