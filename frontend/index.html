@@ -599,6 +599,45 @@
       border-color: var(--accent-red);
     }
 
+    /* MODAL CSS */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center;
+      z-index: 9999; opacity: 0; transition: opacity 0.2s;
+    }
+    .modal-overlay.active { display: flex; opacity: 1; }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); width: 100%; max-width: 600px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5); overflow: hidden;
+      transform: translateY(20px); transition: transform 0.2s;
+    }
+    .modal-overlay.active .modal { transform: translateY(0); }
+    .modal-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+      font-weight: 600; font-size: 16px;
+    }
+    .modal-close { cursor: pointer; color: var(--text-muted); font-size: 20px; }
+    .modal-close:hover { color: white; }
+    .modal-body { padding: 20px; }
+    .modal-textarea {
+      width: 100%; height: 120px; background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border); color: var(--text); padding: 12px;
+      font-family: 'Fira Code', monospace; font-size: 13px;
+      border-radius: var(--radius-sm); margin-bottom: 16px; resize: vertical;
+    }
+    .modal-textarea:focus { outline: none; border-color: var(--accent-blue); }
+    .modal-result {
+      background: #0f111a; padding: 16px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); font-family: 'Fira Code', monospace;
+      font-size: 13px; max-height: 300px; overflow-y: auto; white-space: pre-wrap;
+      word-break: break-all; margin-top: 16px; display: none;
+    }
+    .modal-footer { display: flex; gap: 12px; justify-content: flex-end; }
+
     .btn-sm {
       padding: 7px 16px;
       font-size: 12px;
@@ -1407,6 +1446,29 @@
     </div>
 
     <!-- ═══════════════════════════════════════════
+         TEST MODAL
+    ═══════════════════════════════════════════ -->
+    <div class="modal-overlay" id="test-modal-overlay">
+      <div class="modal">
+        <div class="modal-header">
+          <div><span aria-hidden="true">🚀</span> Test Function: <span id="test-modal-title" style="color:var(--accent-blue)"></span></div>
+          <div class="modal-close" onclick="closeTestModal()">×</div>
+        </div>
+        <div class="modal-body">
+          <label style="display:block; margin-bottom: 8px; font-size: 13px; color: var(--text-secondary);">Request Body (JSON):</label>
+          <textarea class="modal-textarea" id="test-modal-body">{
+  "name": "VakifBank FaaS"
+}</textarea>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeTestModal()">Cancel</button>
+            <button class="btn btn-primary" style="width: auto; padding: 0 24px;" onclick="runFunctionTest()">Send Request</button>
+          </div>
+          <div class="modal-result" id="test-modal-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
          FOOTER
     ═══════════════════════════════════════════ -->
     <footer class="footer">
@@ -1432,97 +1494,210 @@
     // CODE TEMPLATES
     // ═══════════════════════════════════════════════════════════════
     const TEMPLATES = {
-      python: `import json
+      python: `def handler(req_data):
+    name = req_data.get("name", "World")
+    return {
+        "message": f"Hello, {name}! 👋",
+        "platform": "VakıfBank FaaS",
+        "language": "Python"
+    }`,
+      node: `const handler = (body) => {
+  const name = body?.name || 'World';
+  return {
+    message: \`Hello, \${name}! 👋\`,
+    platform: 'VakıfBank FaaS',
+    language: 'Node.js'
+  };
+};`,
+      go: `func Handler(body map[string]interface{}) map[string]interface{} {
+	name := "World"
+	if n, ok := body["name"].(string); ok && n != "" {
+		name = n
+	}
+	
+	return map[string]interface{}{
+		"message":  "Hello, " + name + "! 👋",
+		"platform": "VakıfBank FaaS",
+		"language": "Go",
+	}
+}`,
+      typescript: `const handler = (body: any): any => {
+  const name = body?.name || 'World';
+  return {
+    message: \`Hello, \${name}! 👋\`,
+    platform: 'VakıfBank FaaS',
+    language: 'TypeScript'
+  };
+};`,
+      quarkus: `    public java.util.Map<String, Object> handler(java.util.Map<String, Object> input) {
+        String name = "World";
+        if (input != null && input.containsKey("name")) {
+            name = input.get("name").toString();
+        }
+        
+        return java.util.Map.of(
+            "message", "Hello, " + name + "! 👋",
+            "platform", "VakıfBank FaaS",
+            "language", "Java (Quarkus)"
+        );
+    }`,
+      rust: `pub fn handler(body: serde_json::Value) -> serde_json::Value {
+    let name = body.get("name")
+                   .and_then(|v| v.as_str())
+                   .unwrap_or("World");
+                   
+    serde_json::json!({
+        "message": format!("Hello, {}! 👋", name),
+        "platform": "VakıfBank FaaS",
+        "language": "Rust"
+    })
+}`
+    };
 
-def new():
-    return Function()
+    function wrapCode(lang, userCode) {
+      if (lang === 'python') {
+        const indented = userCode.split('\n').map(l => l ? '    ' + l : '').join('\n');
+        return `import json
+import uuid
+import platform
+from datetime import datetime
+
+# --- USER CODE START ---
+${userCode}
+# --- USER CODE END ---
+
+def new(): return Function()
 
 class Function:
-    def __init__(self):
-        pass
-
+    def __init__(self): pass
     async def handle(self, scope, receive, send):
-        """
-        VakıfBank FaaS — Python ASGI Function
-        """
         body_bytes = b""
         while True:
             message = await receive()
             if message['type'] == 'http.request':
                 body_bytes += message.get('body', b'')
-                if not message.get('more_body', False):
-                    break
+                if not message.get('more_body', False): break
+        try: req_data = json.loads(body_bytes)
+        except: req_data = {}
         
         try:
-            req_data = json.loads(body_bytes)
-        except:
-            req_data = {}
-            
-        # ======================================================
-        # ⬇️ WRITE YOUR CUSTOM LOGIC HERE ⬇️
-        # JSON body is parsed into 'req_data' dictionary
-        name = req_data.get("name", "World")
-        
-        response_data = {
-            "message": f"Hello, {name}! 👋",
-            "platform": "VakıfBank FaaS",
-            "language": "Python (ASGI)"
-        }
-        # ======================================================
-        
+            response_data = handler(req_data)
+            status_code = 200
+        except Exception as e:
+            response_data = {"error": str(e)}
+            status_code = 500
+
         await send({
             'type': 'http.response.start',
-            'status': 200,
+            'status': status_code,
             'headers': [[b'content-type', b'application/json']],
         })
         await send({
             'type': 'http.response.body',
             'body': json.dumps(response_data).encode(),
         })
-`,
-      node: `/**
- * VakıfBank FaaS — Node.js Function
- */
+`;
+      }
+      
+      if (lang === 'node') {
+        return `
+// --- USER CODE START ---
+${userCode}
+// --- USER CODE END ---
+
 const handle = async (context, body) => {
-  // ======================================================
-  // ⬇️ WRITE YOUR CUSTOM LOGIC HERE ⬇️
-  const name = body?.name || 'World';
-  const responseBody = {
-    message: \`Hello, \${name}! 👋\`,
-    platform: 'VakıfBank FaaS',
-    language: 'Node.js'
-  };
-  // ======================================================
-
-  return {
-    body: responseBody,
-    headers: { 'content-type': 'application/json' }
-  };
+  try {
+    const responseBody = handler(body);
+    return { body: responseBody, headers: { 'content-type': 'application/json' } };
+  } catch(e) {
+    return { body: {error: e.message}, headers: { 'content-type': 'application/json' }, statusCode: 500 };
+  }
 }
-
 module.exports = { handle };
-`,
-      go: `package function
-
+`;
+      }
+      
+      if (lang === 'go') {
+        return `package function
 import (
-\t"context"
-\t"encoding/json"
-\t"net/http"
-\t"fmt"
+	"context"
+	"encoding/json"
+	"net/http"
 )
 
+// --- USER CODE START ---
+${userCode}
+// --- USER CODE END ---
+
 func Handle(ctx context.Context, res http.ResponseWriter, req *http.Request) {
-\tvar body struct { Name string \`json:"name"\` }
-\tif err := json.NewDecoder(req.Body).Decode(&body); err != nil || body.Name == "" {
-\t\tbody.Name = "World"
-\t}
-\tres.Header().Set("Content-Type", "application/json")
-\tfmt.Fprintf(res, \`{"message":"Hello, %s! 👋","platform":"VakıfBank FaaS","language":"Go 1.21"}\`, body.Name)
+	var body map[string]interface{}
+	json.NewDecoder(req.Body).Decode(&body)
+	if body == nil { body = make(map[string]interface{}) }
+
+	responseBody := Handler(body)
+
+	res.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(res).Encode(responseBody)
 }
-`,
-    };
+`;
+      }
+
+      if (lang === 'typescript') {
+        return `
+// --- USER CODE START ---
+${userCode}
+// --- USER CODE END ---
+
+export const handle = async (context: any, body: any) => {
+  try {
+    const responseBody = handler(body);
+    return { body: responseBody, headers: { 'content-type': 'application/json' } };
+  } catch(e: any) {
+    return { body: {error: e.message}, headers: { 'content-type': 'application/json' }, statusCode: 500 };
+  }
+}
+`;
+      }
+
+      if (lang === 'quarkus') {
+        const indented = userCode.split('\n').map(l => l ? '    ' + l : '').join('\n');
+        return `package functions;
+import io.quarkus.funqy.Funq;
+import java.util.Map;
+
+public class Function {
+// --- USER CODE START ---
+${indented}
+// --- USER CODE END ---
+
+    @Funq
+    public Map<String, Object> handle(Map<String, Object> input) {
+        if (input == null) input = java.util.Map.of();
+        return handler(input);
+    }
+}
+`;
+      }
+
+      if (lang === 'rust') {
+        return `use serde_json::Value;
+
+// --- USER CODE START ---
+${userCode}
+// --- USER CODE END ---
+
+pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Responder {
+    let response = handler(req.into_inner());
+    actix_web::web::Json(response)
+}
+`;
+      }
+
+      return userCode; // Fallback
+    }
 
     const LANG_META = {
+   const LANG_META = {
       python: { label: 'python · func.py', mode: 'python' },
       node: { label: 'javascript · index.js', mode: 'javascript' },
       go: { label: 'go · handle.go', mode: 'text/x-go' },
@@ -1541,7 +1716,7 @@ func Handle(ctx context.Context, res http.ResponseWriter, req *http.Request) {
         indentUnit: 4, tabSize: 4, indentWithTabs: false, lineWrapping: false,
         extraKeys: { Tab: (cm) => cm.execCommand('indentMore') },
       });
-      editor.setValue(TEMPLATES.python);
+      loadTemplate('python');
 
       document.getElementById('fn-language').addEventListener('change', (e) => {
         const lang = e.target.value;
@@ -1560,36 +1735,10 @@ func Handle(ctx context.Context, res http.ResponseWriter, req *http.Request) {
     // ═══════════════════════════════════════════════════════════════
     // TEMPLATE LOADER
     // ═══════════════════════════════════════════════════════════════
-    const TEMPLATE_MARKERS = {
-      python: [
-        { from: 0, to: 25 },
-        { from: 38, to: 47 }
-      ],
-      node: [
-        { from: 0, to: 3 },
-        { from: 13, to: 20 }
-      ]
-    };
-
     function loadTemplate(lang) {
       if (lang === 'clear') { clearEditor(); return; }
       if (TEMPLATES[lang]) {
         editor.setValue(TEMPLATES[lang]);
-        
-        // Clear all previous marks
-        editor.getAllMarks().forEach(m => m.clear());
-        
-        // Apply read-only marks for the boilerplate
-        const markers = TEMPLATE_MARKERS[lang];
-        if (markers) {
-          markers.forEach(range => {
-            editor.markText(
-              { line: range.from, ch: 0 },
-              { line: range.to, ch: 9999 },
-              { readOnly: true, className: 'read-only-code', atomic: false }
-            );
-          });
-        }
       }
       
       const sel = document.getElementById('fn-language');
@@ -1775,7 +1924,12 @@ func Handle(ctx context.Context, res http.ResponseWriter, req *http.Request) {
         const res = await fetch(`${API_BASE}/functions`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        renderFunctionsTable(data.functions || []);
+        const funcs = data.functions || [];
+        
+        // Sort newest first (so oldest stays at the bottom)
+        funcs.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        
+        renderFunctionsTable(funcs);
       } catch (err) { console.error('Failed to load functions:', err); }
     }
 
@@ -1800,11 +1954,65 @@ func Handle(ctx context.Context, res http.ResponseWriter, req *http.Request) {
           <td>${urlCell}</td>
           <td><span class="ready-badge ${readyCls}" role="status">${readyLabel}</span></td>
           <td>${escHtml(created)}</td>
-          <td><button class="btn btn-danger" onclick="deleteFunction('${escHtml(fn.name)}')" aria-label="Delete function ${escHtml(fn.name)}">Delete</button></td>
+          <td style="display:flex; gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="openTestModal('${escHtml(fn.url || '')}', '${escHtml(fn.name)}')" aria-label="Test">Test</button>
+            <button class="btn btn-ghost btn-sm" onclick="copyCurl('${escHtml(fn.url || '')}')" aria-label="cURL">cURL</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteFunction('${escHtml(fn.name)}')" aria-label="Delete">Delete</button>
+          </td>
         </tr>`;
       }).join('');
 
       container.innerHTML = `<table><thead><tr><th scope="col">Name</th><th scope="col">Live URL</th><th scope="col">Status</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    let currentTestUrl = '';
+    
+    function openTestModal(url, name) {
+      if (!url) { showToast('Function has no Live URL yet.', 'warn'); return; }
+      currentTestUrl = url;
+      document.getElementById('test-modal-title').textContent = name;
+      document.getElementById('test-modal-result').style.display = 'none';
+      document.getElementById('test-modal-overlay').classList.add('active');
+    }
+    
+    function closeTestModal() {
+      document.getElementById('test-modal-overlay').classList.remove('active');
+    }
+    
+    async function runFunctionTest() {
+      const resultDiv = document.getElementById('test-modal-result');
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = '<span style="color:var(--text-muted)">Sending request...</span>';
+      
+      const bodyStr = document.getElementById('test-modal-body').value;
+      let bodyData;
+      try { bodyData = JSON.parse(bodyStr); } 
+      catch (e) { resultDiv.innerHTML = `<span style="color:var(--accent-red)">Invalid JSON: ${e.message}</span>`; return; }
+      
+      try {
+        const start = Date.now();
+        const res = await fetch(currentTestUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyData)
+        });
+        const ms = Date.now() - start;
+        
+        let text = await res.text();
+        try { text = JSON.stringify(JSON.parse(text), null, 2); } catch(e) {}
+        
+        const color = res.ok ? 'var(--accent-green)' : 'var(--accent-red)';
+        resultDiv.innerHTML = `<div style="margin-bottom:8px; color:${color}; font-weight:bold;">HTTP ${res.status} (${ms}ms)</div><div>${escHtml(text)}</div>`;
+      } catch (err) {
+        resultDiv.innerHTML = `<div style="color:var(--accent-red)">Request failed: ${err.message}<br><br><small style="color:var(--text-muted)">Note: If this is a CORS error, you can use the cURL button instead.</small></div>`;
+      }
+    }
+    
+    async function copyCurl(url) {
+      if (!url) { showToast('Function has no Live URL yet.', 'warn'); return; }
+      const cmd = \`curl -X POST \${url} -H "Content-Type: application/json" -d '{"name": "test"}'\`;
+      try { await navigator.clipboard.writeText(cmd); showToast('📋 cURL copied to clipboard!', 'success'); }
+      catch { showToast('Failed to copy', 'error'); }
     }
 
     async function deleteFunction(name) {
