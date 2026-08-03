@@ -35,41 +35,7 @@ data:
   # FastAPI log level
   LOG_LEVEL: "info"
 
----
-# ── Secret: Docker Hub registry credentials ───────────────────────────────────
-# This secret must be manually populated after first deploy, OR via CI/CD.
-#
-# To create this secret manually on the server:
-#   kubectl create secret docker-registry docker-hub-creds \
-#     --docker-server=https://index.docker.io/v1/ \
-#     --docker-username=<DOCKER_HUB_USERNAME> \
-#     --docker-password=<DOCKER_HUB_TOKEN> \
-#     --docker-email=<your-email> \
-#     -n faas-platform
-#
-# Then link it to the default ServiceAccount:
-#   kubectl patch serviceaccount faas-orchestrator -n faas-platform \
-#     -p '{"imagePullSecrets":[{"name":"docker-hub-creds"}]}'
-#
-# NOTE: The func CLI running inside the pod also needs this for `func deploy`.
-# Mount it as a volume at /root/.docker/config.json (done below).
-apiVersion: v1
-kind: Secret
-metadata:
-  name: docker-hub-creds
-  namespace: faas-platform
-  labels:
-    app: faas-platform-api
-  annotations:
-    # Populated by CI/CD — do not commit real values
-    kubernetes.io/description: "Docker Hub credentials for func deploy image push"
-type: kubernetes.io/dockerconfigjson
-data:
-  # Populated by CI/CD pipeline via kubectl create secret --dry-run=client -o yaml | kubectl apply -f -
-  # Placeholder — base64-encoded empty config (replaced at deploy time)
-  .dockerconfigjson: e30K
 
----
 # ── Deployment: FastAPI FaaS Orchestrator ────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
@@ -173,7 +139,7 @@ spec:
           volumeMounts:
             # Docker Hub credentials for func deploy image push
             - name: docker-config
-              mountPath: /root/.docker
+              mountPath: /home/faas/.docker
               readOnly: true
             # Isolated workspace for func CLI operations
             - name: workspace
