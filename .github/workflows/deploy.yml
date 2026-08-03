@@ -230,13 +230,15 @@ jobs:
               echo "✅ Minikube is running."
             fi
 
-            # ── 2. Verify Knative Serving is installed ─────────────────
-            if ! kubectl get ns knative-serving &>/dev/null; then
-              echo "❌ ERROR: Knative Serving namespace not found."
-              echo "   Install Knative first: See README.md for setup instructions."
-              exit 1
-            fi
-            echo "✅ Knative Serving is installed."
+            # ── 2. Ensure Knative Serving & Kourier are configured ──────
+            echo "📦 Ensuring Knative Serving + Kourier Ingress + DNS..."
+            kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.14.0/serving-crds.yaml
+            kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.14.0/serving-core.yaml
+            kubectl apply -f https://github.com/knative/net-kourier/releases/download/knative-v1.14.0/kourier.yaml
+            kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.14.0/serving-default-domain.yaml
+            
+            kubectl patch configmap/config-network -n knative-serving \
+              --type merge --patch '{"data":{"ingress-class":"kourier.ingress.networking.knative.dev"}}'
 
             # ── 3. Clone or update the repository ─────────────────────
             if [ ! -d "$PROJECT_DIR" ]; then
@@ -250,14 +252,11 @@ jobs:
               git reset --hard "origin/$(git rev-parse --abbrev-ref HEAD)"
             fi
 
-            # ── 4. Apply namespace + RBAC ──────────────────────────────
-            echo "📄 Applying namespaces and RBAC..."
+            # ── 0. Setup Namespaces and Docker Credentials ────────────
+            echo "🔐 Setting up Kubernetes Secrets for Docker Hub..."
             kubectl apply -f k8s/namespace.yaml
-
-            # ── 5. Upsert Docker Hub credentials as k8s Secret ─────────
-            # The CI pipeline injects credentials so the func CLI in the
-            # pod can push built function images to Docker Hub.
-            echo "🔐 Updating Docker Hub registry secret..."
+            
+            # Credentials for Orchestrator (to push)
             kubectl create secret docker-registry docker-hub-creds \
               --docker-server=https://index.docker.io/v1/ \
               --docker-username="${{ secrets.DOCKER_HUB_USERNAME }}" \
@@ -265,10 +264,23 @@ jobs:
               --namespace=faas-platform \
               --dry-run=client -o yaml | kubectl apply -f -
 
+            # Credentials for Tenant Functions (to pull)
+            kubectl create secret docker-registry docker-hub-creds \
+              --docker-server=https://index.docker.io/v1/ \
+              --docker-username="${{ secrets.DOCKER_HUB_USERNAME }}" \
+              --docker-password="${{ secrets.DOCKER_HUB_TOKEN }}" \
+              --namespace=tenant-functions \
+              --dry-run=client -o yaml | kubectl apply -f -
+
+            # Patch the default ServiceAccount in tenant-functions to use the pull secret
+            kubectl patch serviceaccount default \
+              -n tenant-functions \
+              -p '{"imagePullSecrets": [{"name": "docker-hub-creds"}]}'
+
             # Patch the ServiceAccount to use pull secret for the API image itself
             kubectl patch serviceaccount faas-orchestrator \
               -n faas-platform \
-              -p '{"imagePullSecrets":[{"name":"docker-hub-creds"}]}' \
+              -p '{"imagePullSecrets": [{"name": "docker-hub-creds"}]}' \
               --type=merge || true
 
             # ── 6. Deploy with the new image tag ──────────────────────
