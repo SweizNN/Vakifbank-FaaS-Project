@@ -162,6 +162,30 @@ async def deploy_pipeline(
         entrypoint.write_text(req.code, encoding="utf-8")
         yield sse_event("log", f"   → Wrote {len(req.code)} bytes to {entrypoint.name}")
 
+        if req.config_yaml:
+            yield sse_event("step", "⚙️  Step 2.5/4 — Applying Advanced YAML Configuration")
+            try:
+                import yaml
+                user_cfg = yaml.safe_load(req.config_yaml) or {}
+                func_yaml_path = fn_dir / "func.yaml"
+                if func_yaml_path.exists():
+                    func_cfg = yaml.safe_load(func_yaml_path.read_text(encoding="utf-8")) or {}
+                    
+                    if "envs" in user_cfg:
+                        func_cfg.setdefault("envs", []).extend(user_cfg["envs"])
+                    
+                    if "options" in user_cfg:
+                        func_cfg.setdefault("options", {}).update(user_cfg["options"])
+                        
+                    func_yaml_path.write_text(yaml.safe_dump(func_cfg), encoding="utf-8")
+                    yield sse_event("log", "   → Successfully merged custom configuration into func.yaml")
+                else:
+                    yield sse_event("log", "   → Warning: func.yaml not found, skipping config merge.")
+            except Exception as e:
+                yield sse_event("error", f"❌ Failed to parse or apply YAML config: {str(e)}")
+                yield sse_event("done", json.dumps({"status": "error", "job_id": job_id}))
+                return
+
         # ── Step 3: func deploy ────────────────────────────────────────────
         fn_image = f"{REGISTRY_PREFIX}/faas-fn-{req.name}"
         yield sse_event("step", f"🐳 Step 3/4 — Build & deploy via Buildpacks → {fn_image}")

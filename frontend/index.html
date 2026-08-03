@@ -1330,6 +1330,8 @@
               <button type="button" class="lang-chip" onclick="loadTemplate('go')" data-lang="go">🐹 Go
                 template</button>
               <button type="button" class="lang-chip" onclick="clearEditor()" data-lang="clear">✕ Clear</button>
+              <button type="button" class="lang-chip" style="margin-left:auto; background:var(--accent-blue); color:white; border:none;" onclick="document.getElementById('file-upload').click()">📁 Upload File</button>
+              <input type="file" id="file-upload" style="display:none" onchange="handleFileUpload(event)" accept=".py,.js,.ts,.go,.java,.rs,.yaml,.yml">
             </div>
             <div class="editor-wrapper">
               <div class="editor-topbar">
@@ -1339,6 +1341,14 @@
               <textarea id="code-editor-textarea" aria-label="Function code editor"></textarea>
             </div>
           </div>
+
+          <!-- Advanced Settings (YAML) -->
+          <details style="margin-bottom: 20px;">
+            <summary style="cursor:pointer; font-size:13px; color:var(--text-secondary); font-weight:500;">⚙️ Advanced Configuration (YAML)</summary>
+            <div style="margin-top:10px;">
+              <textarea id="yaml-config-editor" style="width:100%; height:120px; font-family:monospace; font-size:12px; padding:10px; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border); border-radius:var(--radius-sm); resize:vertical;" placeholder="# Configure environment variables and scaling (func.yaml format)&#10;envs:&#10;- name: MY_VAR&#10;  value: my-value&#10;options:&#10;  scale:&#10;    min: 0&#10;    max: 10"></textarea>
+            </div>
+          </details>
 
           <button type="submit" class="btn btn-primary" id="deploy-btn" aria-busy="false">
             <span id="deploy-btn-icon">⚡</span>
@@ -1587,14 +1597,24 @@ class Function:
             response_data = {"error": str(e)}
             status_code = 500
 
+        content_type = b'application/json'
+        if isinstance(response_data, str):
+            if response_data.strip().lower().startswith(('<!doctype html', '<html')):
+                content_type = b'text/html; charset=utf-8'
+            else:
+                content_type = b'text/plain; charset=utf-8'
+            body_payload = response_data.encode('utf-8')
+        else:
+            body_payload = json.dumps(response_data).encode('utf-8')
+
         await send({
             'type': 'http.response.start',
             'status': status_code,
-            'headers': [[b'content-type', b'application/json']],
+            'headers': [[b'content-type', content_type]],
         })
         await send({
             'type': 'http.response.body',
-            'body': json.dumps(response_data).encode(),
+            'body': body_payload,
         })
 `;
       }
@@ -1608,7 +1628,16 @@ ${userCode}
 const handle = async (context, body) => {
   try {
     const responseBody = handler(body);
-    return { body: responseBody, headers: { 'content-type': 'application/json' } };
+    let contentType = 'application/json';
+    if (typeof responseBody === 'string') {
+      const trimmed = responseBody.trim().toLowerCase();
+      if (trimmed.startsWith('<!doctype html') || trimmed.startsWith('<html')) {
+        contentType = 'text/html; charset=utf-8';
+      } else {
+        contentType = 'text/plain; charset=utf-8';
+      }
+    }
+    return { body: responseBody, headers: { 'content-type': contentType } };
   } catch(e) {
     return { body: {error: e.message}, headers: { 'content-type': 'application/json' }, statusCode: 500 };
   }
@@ -1774,6 +1803,38 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
       editor.focus();
       document.querySelectorAll('.lang-chip[data-lang]').forEach(c => c.classList.remove('active'));
     }
+    
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const content = e.target.result;
+        if (file.name.endsWith('.yaml') || file.name.endsWith('.yml')) {
+          document.getElementById('yaml-config-editor').value = content;
+          document.querySelector('details').open = true;
+          showToast(`✅ YAML loaded: ${file.name}`, 'success');
+        } else {
+          const ext = file.name.split('.').pop();
+          let lang = 'python';
+          if (ext === 'js') lang = 'node';
+          else if (ext === 'go') lang = 'go';
+          else if (ext === 'ts') lang = 'typescript';
+          else if (ext === 'java') lang = 'quarkus';
+          else if (ext === 'rs') lang = 'rust';
+          
+          document.getElementById('fn-language').value = lang;
+          document.getElementById('fn-language').dispatchEvent(new Event('change'));
+          
+          setTimeout(() => {
+            editor.setValue(content);
+            showToast(`✅ Code loaded: ${file.name}`, 'success');
+          }, 50);
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
 
     // ═══════════════════════════════════════════════════════════════
     // DEPLOY (SSE streaming)
@@ -1783,6 +1844,7 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
       const name = document.getElementById('fn-name').value.trim();
       const language = document.getElementById('fn-language').value;
       const code = editor.getValue().trim();
+      const config_yaml = document.getElementById('yaml-config-editor').value.trim();
 
       if (!name || !language || !code) { showToast('Please fill in all fields and provide your function code.', 'error'); return; }
       if (!/^[a-z][a-z0-9-]{2,49}$/.test(name)) { showToast('Function name must start with a lowercase letter and contain only letters, digits, and hyphens.', 'error'); return; }
@@ -1798,7 +1860,7 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
         const response = await fetch(`${API_BASE}/deploy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, language, code: wrapCode(language, code) }),
+          body: JSON.stringify({ name, language, code: wrapCode(language, code), config_yaml }),
         });
 
         if (!response.ok) {
