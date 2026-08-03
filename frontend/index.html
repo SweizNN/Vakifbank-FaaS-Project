@@ -1827,9 +1827,27 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
           document.getElementById('fn-language').dispatchEvent(new Event('change'));
           
           setTimeout(() => {
-            editor.setValue(content);
-            showToast(`✅ Code loaded: ${file.name}`, 'success');
-          }, 50);
+            const markers = TEMPLATE_MARKERS[lang] || [];
+            let firstUnlocked = 1;
+            let lastUnlocked = editor.lineCount() - 1;
+            
+            if (markers.length === 2) {
+              firstUnlocked = markers[0].from + 1;
+              lastUnlocked = markers[1].from - 1;
+            } else if (markers.length === 1 && markers[0].from === 0) {
+              firstUnlocked = 1;
+            }
+            
+            let spaces = '';
+            if (['python', 'quarkus', 'rust'].includes(lang)) spaces = '    ';
+            if (['node', 'typescript'].includes(lang)) spaces = '  ';
+            if (lang === 'go') spaces = '\t';
+            
+            const finalContent = content.split('\n').map(l => l ? spaces + l : '').join('\n');
+            
+            editor.replaceRange(finalContent + '\n', {line: firstUnlocked, ch: 0}, {line: lastUnlocked + 1, ch: 0});
+            showToast(`✅ Code inserted into template: ${file.name}`, 'success');
+          }, 100);
         }
       };
       reader.readAsText(file);
