@@ -637,35 +637,65 @@
     // CODE TEMPLATES
     // ═══════════════════════════════════════════════════════════════
     const TEMPLATES = {
-      python: `from parliament import Context
+      python: `import json
 
-def main(context: Context):
-    """
-    VakıfBank FaaS — Python Function
-    Receives HTTP requests via Knative Serving.
-    """
-    body = context.request.json if context.request.content_type == 'application/json' else {}
-    name = body.get('name', 'World')
-    return {
-        "message": f"Hello, {name}! 👋",
-        "platform": "VakıfBank FaaS",
-        "language": "Python 3.11"
-    }, 200
+def new():
+    return Function()
+
+class Function:
+    def __init__(self):
+        pass
+
+    async def handle(self, scope, receive, send):
+        """
+        VakıfBank FaaS — Python ASGI Function
+        """
+        body_bytes = b""
+        while True:
+            message = await receive()
+            if message['type'] == 'http.request':
+                body_bytes += message.get('body', b'')
+                if not message.get('more_body', False):
+                    break
+        
+        try:
+            req_data = json.loads(body_bytes)
+        except:
+            req_data = {}
+            
+        name = req_data.get("name", "World")
+        response_data = {
+            "message": f"Hello, {name}! 👋",
+            "platform": "VakıfBank FaaS",
+            "language": "Python (ASGI)"
+        }
+        
+        await send({
+            'type': 'http.response.start',
+            'status': 200,
+            'headers': [[b'content-type', b'application/json']],
+        })
+        await send({
+            'type': 'http.response.body',
+            'body': json.dumps(response_data).encode(),
+        })
 `,
-      node: `'use strict';
-
-/**
+      node: `/**
  * VakıfBank FaaS — Node.js Function
  */
-module.exports = async function (context) {
-  const body = context.request.body || {};
-  const name = body.name || 'World';
+const handle = async (context, body) => {
+  const name = body?.name || 'World';
   return {
-    message: \`Hello, \${name}! 👋\`,
-    platform: 'VakıfBank FaaS',
-    language: 'Node.js 18',
+    body: {
+      message: \`Hello, \${name}! 👋\`,
+      platform: 'VakıfBank FaaS',
+      language: 'Node.js'
+    },
+    headers: { 'content-type': 'application/json' }
   };
-};
+}
+
+module.exports = { handle };
 `,
       go: `package function
 

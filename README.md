@@ -157,9 +157,9 @@ The pipeline will:
 
 | Language | Template | Entrypoint |
 |----------|----------|------------|
-| `python` | `python` | `func.py` |
+| `python` | `python` | `function/func.py` |
 | `node` | `node` | `index.js` |
-| `go` | `go` | `handle.go` |
+| `go` | `go` | `function.go` |
 | `typescript` | `typescript` | `index.ts` |
 | `quarkus` | `quarkus` | `src/main/java/functions/Function.java` |
 | `rust` | `rust` | `src/main.rs` |
