@@ -37,7 +37,7 @@ from config import (
 )
 from health_check import run_all_checks
 from k8s import kubectl, list_ksvc
-from models import DeleteResponse, DeployRequest
+from models import DeleteResponse, DeployRequest, ProxyRequest
 from pipeline import deploy_jobs, deploy_pipeline
 
 
@@ -230,3 +230,31 @@ async def get_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
     return {"job_id": job_id, **job}
+
+
+@app.post("/proxy", summary="Proxy requests to bypass CORS for testing functions")
+async def proxy_request(req: ProxyRequest):
+    import urllib.request
+    import urllib.error
+    import json
+    
+    data = json.dumps(req.body).encode('utf-8')
+    headers = req.headers
+    headers['Content-Type'] = 'application/json'
+    
+    request = urllib.request.Request(req.url, data=data, headers=headers, method=req.method)
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            status = response.getcode()
+            body_bytes = response.read()
+    except urllib.error.HTTPError as e:
+        status = e.code
+        body_bytes = e.read()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    try:
+        resp_json = json.loads(body_bytes)
+        return {"status": status, "body": resp_json}
+    except:
+        return {"status": status, "body": body_bytes.decode('utf-8')}

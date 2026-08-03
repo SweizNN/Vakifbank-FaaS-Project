@@ -1731,6 +1731,15 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
       setInterval(loadFunctions, 30000);
     });
 
+    const TEMPLATE_MARKERS = {
+      python: [ { from: 0, to: 0 } ],
+      node: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
+      go: [ { from: 0, to: 0 }, { from: 11, to: 11 } ],
+      typescript: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
+      quarkus: [ { from: 0, to: 0 }, { from: 11, to: 11 } ],
+      rust: [ { from: 0, to: 0 }, { from: 9, to: 9 } ]
+    };
+
     // ═══════════════════════════════════════════════════════════════
     // TEMPLATE LOADER
     // ═══════════════════════════════════════════════════════════════
@@ -1738,6 +1747,18 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
       if (lang === 'clear') { clearEditor(); return; }
       if (TEMPLATES[lang]) {
         editor.setValue(TEMPLATES[lang]);
+        
+        editor.getAllMarks().forEach(m => m.clear());
+        const markers = TEMPLATE_MARKERS[lang];
+        if (markers) {
+          markers.forEach(range => {
+            editor.markText(
+              { line: range.from, ch: 0 },
+              { line: range.to, ch: 9999 },
+              { readOnly: true, className: 'read-only-code', atomic: false }
+            );
+          });
+        }
       }
       
       const sel = document.getElementById('fn-language');
@@ -1990,28 +2011,42 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
       
       try {
         const start = Date.now();
-        const res = await fetch(currentTestUrl, {
+        // Use the backend proxy to bypass CORS restrictions
+        const res = await fetch(`${API_BASE}/proxy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyData)
+          body: JSON.stringify({
+            url: currentTestUrl,
+            method: 'POST',
+            body: bodyData
+          })
         });
         const ms = Date.now() - start;
         
-        let text = await res.text();
-        try { text = JSON.stringify(JSON.parse(text), null, 2); } catch(e) {}
+        const proxyData = await res.json();
+        const statusCode = proxyData.status || res.status;
+        const bodyResponse = proxyData.body || proxyData;
         
-        const color = res.ok ? 'var(--accent-green)' : 'var(--accent-red)';
-        resultDiv.innerHTML = `<div style="margin-bottom:8px; color:${color}; font-weight:bold;">HTTP ${res.status} (${ms}ms)</div><div>${escHtml(text)}</div>`;
+        let text = typeof bodyResponse === 'string' ? bodyResponse : JSON.stringify(bodyResponse, null, 2);
+        const color = (statusCode >= 200 && statusCode < 300) ? 'var(--accent-green)' : 'var(--accent-red)';
+        resultDiv.innerHTML = `<div style="margin-bottom:8px; color:${color}; font-weight:bold;">HTTP ${statusCode} (${ms}ms)</div><div>${escHtml(text)}</div>`;
       } catch (err) {
-        resultDiv.innerHTML = `<div style="color:var(--accent-red)">Request failed: ${err.message}<br><br><small style="color:var(--text-muted)">Note: If this is a CORS error, you can use the cURL button instead.</small></div>`;
+        resultDiv.innerHTML = `<div style="color:var(--accent-red)">Request failed: ${err.message}<br><br><small style="color:var(--text-muted)">Check if the backend is running and the proxy route is deployed.</small></div>`;
       }
     }
     
     async function copyCurl(url) {
       if (!url) { showToast('Function has no Live URL yet.', 'warn'); return; }
       const cmd = `curl -X POST ${url} -H "Content-Type: application/json" -d '{"name": "test"}'`;
-      try { await navigator.clipboard.writeText(cmd); showToast('📋 cURL copied to clipboard!', 'success'); }
-      catch { showToast('Failed to copy', 'error'); }
+      if (navigator.clipboard && window.isSecureContext) {
+        try { await navigator.clipboard.writeText(cmd); showToast('📋 cURL copied to clipboard!', 'success'); return; } catch (e) {}
+      }
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = cmd; ta.style.position = "fixed"; ta.style.left = "-9999px";
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        showToast('📋 cURL copied to clipboard!', 'success');
+      } catch (err) { showToast('Failed to copy', 'error'); }
     }
 
     async function deleteFunction(name) {

@@ -43,3 +43,10 @@ class DeployRequest(BaseModel):
 class DeleteResponse(BaseModel):
     message: str
     function_name: str
+
+
+class ProxyRequest(BaseModel):
+    url: str
+    method: str = "POST"
+    headers: dict = {}
+    body: dict = {}
