@@ -35,7 +35,7 @@ data:
   # FastAPI log level
   LOG_LEVEL: "info"
 
-
+---
 # ── Deployment: FastAPI FaaS Orchestrator ────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
