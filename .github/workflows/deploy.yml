@@ -216,6 +216,12 @@ jobs:
             echo "    Image Tag: ${IMAGE_TAG}"
             echo "========================================================"
 
+            # ── 0. Open Firewall Ports ─────────────────────────────────
+            echo "🛡️ Configuring UFW firewall (if active)..."
+            ufw allow 30081/tcp || true
+            ufw allow 80/tcp || true
+            ufw allow 443/tcp || true
+
             # ── 1. Verify k3s is running ──────────────────────────────
             if ! kubectl cluster-info --request-timeout=10s &>/dev/null; then
               echo "❌ ERROR: kubectl cannot reach the cluster. Is k3s running?"
