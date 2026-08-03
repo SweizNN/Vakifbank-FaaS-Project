@@ -2009,7 +2009,7 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
     
     async function copyCurl(url) {
       if (!url) { showToast('Function has no Live URL yet.', 'warn'); return; }
-      const cmd = \`curl -X POST \${url} -H "Content-Type: application/json" -d '{"name": "test"}'\`;
+      const cmd = `curl -X POST ${url} -H "Content-Type: application/json" -d '{"name": "test"}'`;
       try { await navigator.clipboard.writeText(cmd); showToast('📋 cURL copied to clipboard!', 'success'); }
       catch { showToast('Failed to copy', 'error'); }
     }
