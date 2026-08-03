@@ -34,7 +34,7 @@ FRONTEND_PATH: Path = Path(__file__).parent.parent / "frontend" / "index.html"
 LANGUAGE_CONFIG: dict[str, dict] = {
     "python": {
         "template": "python",
-        "entrypoint": "func.py",
+        "entrypoint": "function/func.py",
         "description": "Python 3.11 — func.py → main(CloudEvent) or main(request)",
     },
     "node": {
@@ -44,7 +44,7 @@ LANGUAGE_CONFIG: dict[str, dict] = {
     },
     "go": {
         "template": "go",
-        "entrypoint": "handle.go",
+        "entrypoint": "function.go",
         "description": "Go 1.21 — handle.go → func Handle(ctx context.Context, ...) error",
     },
     "typescript": {
