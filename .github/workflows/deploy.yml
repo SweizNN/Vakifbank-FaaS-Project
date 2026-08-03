@@ -222,13 +222,13 @@ jobs:
             ufw allow 80/tcp || true
             ufw allow 443/tcp || true
 
-            # ── 1. Verify k3s is running ──────────────────────────────
+            # ── 1. Verify Kubernetes is running ───────────────────────
             if ! kubectl cluster-info --request-timeout=10s &>/dev/null; then
-              echo "❌ ERROR: kubectl cannot reach the cluster. Is k3s running?"
-              echo "   Check: sudo systemctl status k3s"
+              echo "❌ ERROR: kubectl cannot reach the cluster. Is Minikube/Kubernetes running?"
+              echo "   Check: minikube status"
               exit 1
             fi
-            echo "✅ k3s cluster is reachable."
+            echo "✅ Kubernetes cluster is reachable."
 
             # ── 2. Verify Knative Serving is installed ─────────────────
             if ! kubectl get ns knative-serving &>/dev/null; then
