@@ -960,7 +960,7 @@ func Handle(ctx context.Context, res http.ResponseWriter, req *http.Request) {
       const dot  = document.getElementById('global-status-dot');
       const text = document.getElementById('global-status-text');
       try {
-        const res  = await fetch(`${API_BASE}/health`);
+        const res  = await fetch(`${API_BASE}/health/detail`);
         const data = await res.json();
         const ok   = data.status === 'healthy';
         dot.className    = `status-dot ${ok ? 'healthy' : 'degraded'}`;

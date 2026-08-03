@@ -65,6 +65,8 @@ spec:
       serviceAccountName: faas-orchestrator
       imagePullSecrets:
         - name: docker-hub-creds
+      securityContext:
+        runAsUser: 0 # Run as root to access docker.sock
 
       # Allow the container to access the Docker socket for buildpacks
       # (only needed if running docker-in-docker; with Buildpacks this
@@ -76,6 +78,9 @@ spec:
             items:
               - key: .dockerconfigjson
                 path: config.json
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
         - name: workspace
           emptyDir:
             medium: Memory  # Fast in-memory workspace for func scaffolding
@@ -141,6 +146,8 @@ spec:
             - name: docker-config
               mountPath: /home/faas/.docker
               readOnly: true
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
             # Isolated workspace for func CLI operations
             - name: workspace
               mountPath: /tmp/faas-workspace
