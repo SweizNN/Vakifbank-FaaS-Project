@@ -233,13 +233,15 @@ const TEMPLATE_MARKERS = {
 
 // Locks the boilerplate lines (function signature / closing brace) for the
 // given language so only the handler body stays editable. Must be re-run
-// after any editor.setValue() call — CodeMirror drops all marks on setValue.
-function applyReadOnlyMarkers(lang) {
-  editor.getAllMarks().forEach(m => m.clear());
+// after any setValue() call — CodeMirror drops all marks on setValue.
+// `cm` defaults to the main create-function editor; the Edit modal passes
+// its own CodeMirror instance so the same locking applies there too.
+function applyReadOnlyMarkers(lang, cm = editor) {
+  cm.getAllMarks().forEach(m => m.clear());
   const markers = TEMPLATE_MARKERS[lang];
   if (markers) {
     markers.forEach(range => {
-      editor.markText(
+      cm.markText(
         { line: range.from, ch: 0 },
         { line: range.to, ch: 9999 },
         { readOnly: true, className: 'read-only-code', atomic: false }

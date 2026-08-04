@@ -1,6 +1,6 @@
-﻿// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 // FUNCTIONS TABLE
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 async function loadFunctions() {
   try {
     const res = await fetch(`${API_BASE}/functions`);
@@ -22,22 +22,22 @@ function renderFunctionsTable(functions) {
   document.getElementById('stat-ready').textContent = functions.filter(f => f.ready).length;
 
   if (functions.length === 0) {
-    container.innerHTML = `<div class="empty-state" role="status"><div class="empty-state-icon" aria-hidden="true">ğŸª£</div><div class="empty-state-text">No functions deployed yet</div><div class="empty-state-sub">Deploy your first function using the form above</div></div>`;
+    container.innerHTML = `<div class="empty-state" role="status"><div class="empty-state-icon" aria-hidden="true">🪣</div><div class="empty-state-text">No functions deployed yet</div><div class="empty-state-sub">Deploy your first function using the form above</div></div>`;
     return;
   }
 
   const rows = functions.map(fn => {
     const readyCls = fn.ready ? 'ready' : 'not-ready';
-    const readyLabel = fn.ready ? 'â— Ready' : 'â—Œ Pending';
-    const urlCell = fn.url ? `<a class="fn-url-link" href="${fn.url}" target="_blank" rel="noopener">${fn.url} â†—</a>` : '<span style="color:var(--text-muted)">â€”</span>';
-    const created = fn.created_at ? new Date(fn.created_at).toLocaleString() : 'â€”';
+    const readyLabel = fn.ready ? '● Ready' : '◌ Pending';
+    const urlCell = fn.url ? `<a class="fn-url-link" href="${fn.url}" target="_blank" rel="noopener">${fn.url} ↗</a>` : '<span style="color:var(--text-muted)">—</span>';
+    const created = fn.created_at ? new Date(fn.created_at).toLocaleString() : '—';
     return `<tr>
       <td><span class="fn-name">${escHtml(fn.name)}</span></td>
       <td>${urlCell}</td>
       <td><span class="ready-badge ${readyCls}" role="status">${readyLabel}</span></td>
       <td>${escHtml(created)}</td>
       <td style="display:flex; gap:8px;">
-        <button class="btn btn-ghost btn-sm" onclick="openEditModal('${escHtml(fn.name)}')" aria-label="Edit">âœï¸ Edit</button>
+        <button class="btn btn-ghost btn-sm" onclick="openEditModal('${escHtml(fn.name)}')" aria-label="Edit">✏️ Edit</button>
         <button class="btn btn-ghost btn-sm" onclick="openTestModal('${escHtml(fn.url || '')}', '${escHtml(fn.name)}')" aria-label="Test">Test</button>
         <button class="btn btn-ghost btn-sm" onclick="copyCurl('${escHtml(fn.url || '')}')" aria-label="cURL">cURL</button>
         <button class="btn btn-danger btn-sm" onclick="deleteFunction('${escHtml(fn.name)}')" aria-label="Delete">Delete</button>
@@ -48,9 +48,9 @@ function renderFunctionsTable(functions) {
   container.innerHTML = `<table><thead><tr><th scope="col">Name</th><th scope="col">Live URL</th><th scope="col">Status</th><th scope="col">Created</th><th scope="col">Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 // TEST MODAL
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 let currentTestUrl = '';
 
 function openTestModal(url, name) {
@@ -94,14 +94,14 @@ async function runFunctionTest() {
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// EDIT MODAL â€” state
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
+// EDIT MODAL — state
+// ═══════════════════════════════════════════════════════════════
 let editModalEditor = null;
 let editModalFnName = '';
 let editModalLanguage = '';
 
-// â”€â”€ Open â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Open ─────────────────────────────────────────────────────
 async function openEditModal(name) {
   editModalFnName = name;
   document.getElementById('edit-modal-title').textContent = name;
@@ -111,7 +111,7 @@ async function openEditModal(name) {
   const btn = document.getElementById('edit-deploy-btn');
   if (btn) { btn.disabled = false; }
   const icon = document.getElementById('edit-deploy-btn-icon');
-  if (icon) { icon.className = ''; icon.textContent = 'âš¡'; }
+  if (icon) { icon.className = ''; icon.textContent = '⚡'; }
 
   // Show modal first so CodeMirror can measure its dimensions
   document.getElementById('edit-modal-overlay').classList.add('active');
@@ -130,7 +130,7 @@ async function openEditModal(name) {
           <textarea id="edit-code-textarea"></textarea>
         </div>
         <details id="edit-yaml-details" style="margin-bottom:12px;">
-          <summary style="cursor:pointer; font-size:12px; color:var(--text-secondary); font-weight:500;">âš™ï¸ Advanced Configuration (YAML)</summary>
+          <summary style="cursor:pointer; font-size:12px; color:var(--text-secondary); font-weight:500;">⚙️ Advanced Configuration (YAML)</summary>
           <div style="margin-top:8px;">
             <textarea id="edit-yaml-textarea" style="width:100%; height:100px; font-family:var(--font-mono); font-size:12px; padding:8px; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border); border-radius:var(--radius-sm); resize:vertical;"></textarea>
           </div>
@@ -139,7 +139,7 @@ async function openEditModal(name) {
       <div class="modal-footer" style="padding:16px 20px;">
         <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
         <button class="btn btn-primary" style="width:auto; padding:0 24px;" onclick="submitEditDeploy()" id="edit-deploy-btn">
-          <span id="edit-deploy-btn-icon">âš¡</span> Deploy Update
+          <span id="edit-deploy-btn-icon">⚡</span> Deploy Update
         </button>
       </div>`;
     editModalEditor = null; // force re-init
@@ -151,7 +151,7 @@ async function openEditModal(name) {
     if (res.status === 422) {
       document.getElementById('edit-panel-code').innerHTML = `
         <div class="modal-body" style="text-align:center; padding:32px;">
-          <div style="font-size:32px; margin-bottom:12px;">âš ï¸</div>
+          <div style="font-size:32px; margin-bottom:12px;">⚠️</div>
           <div style="font-weight:700; margin-bottom:8px;">Code not available</div>
           <div style="color:var(--text-muted); font-size:13px;">This function was deployed before the Edit feature existed.<br>Delete it and re-deploy to enable editing and revision history.</div>
         </div>`;
@@ -188,6 +188,7 @@ async function openEditModal(name) {
     }
 
     editModalEditor.setValue(data.code || '');
+    applyReadOnlyMarkers(editModalLanguage, editModalEditor);
     setTimeout(() => editModalEditor.refresh(), 60);
 
     const yamlTA = document.getElementById('edit-yaml-textarea');
@@ -203,7 +204,7 @@ async function openEditModal(name) {
   }
 }
 
-// â”€â”€ Close â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Close ────────────────────────────────────────────────────
 function closeEditModal() {
   document.getElementById('edit-modal-overlay').classList.remove('active');
 }
@@ -214,7 +215,7 @@ function handleEditOverlayClick(e) {
   }
 }
 
-// â”€â”€ Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Tabs ─────────────────────────────────────────────────────
 function switchEditTab(tab) {
   const panels = { code: 'edit-panel-code', revisions: 'edit-panel-revisions' };
   const btns   = { code: 'tab-code',        revisions: 'tab-revisions' };
@@ -237,7 +238,7 @@ function switchEditTab(tab) {
   }
 }
 
-// â”€â”€ Revisions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Revisions ────────────────────────────────────────────────
 async function loadRevisions(name) {
   const listEl = document.getElementById('edit-revisions-list');
   if (!listEl) return;
@@ -256,19 +257,19 @@ async function loadRevisions(name) {
 
     listEl.innerHTML = revisions.map((rev, i) => {
       const isActive = rev.is_active;
-      const date = rev.created_at ? new Date(rev.created_at).toLocaleString() : 'â€”';
+      const date = rev.created_at ? new Date(rev.created_at).toLocaleString() : '—';
       const hasCode = rev.has_code;
       const label = i === 0 ? ' <span style="color:var(--text-muted);font-weight:400;font-size:11px;">(Latest)</span>' : '';
 
       return `<div class="revision-row ${isActive ? 'active-revision' : ''}">
         <div class="revision-name" title="${escHtml(rev.name)}">${escHtml(rev.name)}${label}</div>
         <div class="revision-date">${escHtml(date)}</div>
-        ${isActive ? '<span class="revision-active-badge">ğŸŸ¢ Active</span>' : ''}
+        ${isActive ? '<span class="revision-active-badge">🟢 Active</span>' : ''}
         ${hasCode
-          ? `<button class="btn btn-ghost btn-sm" onclick="loadRevisionCode('${escHtml(name)}', '${escHtml(rev.name)}')">ğŸ“¥ Load Code</button>`
+          ? `<button class="btn btn-ghost btn-sm" onclick="loadRevisionCode('${escHtml(name)}', '${escHtml(rev.name)}')">📥 Load Code</button>`
           : '<span style="font-size:11px; color:var(--text-muted);">No code</span>'}
         ${!isActive
-          ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent-amber);" onclick="performRollback('${escHtml(name)}', '${escHtml(rev.name)}')">â†© Rollback</button>`
+          ? `<button class="btn btn-ghost btn-sm" style="color:var(--accent-amber);" onclick="performRollback('${escHtml(name)}', '${escHtml(rev.name)}')">↩ Rollback</button>`
           : ''}
       </div>`;
     }).join('');
@@ -293,6 +294,7 @@ async function loadRevisionCode(fnName, revisionName) {
       const meta = LANG_META[editModalLanguage] || {};
       if (meta.mode) editModalEditor.setOption('mode', meta.mode);
       editModalEditor.setValue(data.code || '');
+      applyReadOnlyMarkers(editModalLanguage, editModalEditor);
     }
 
     const yamlTA = document.getElementById('edit-yaml-textarea');
@@ -301,7 +303,7 @@ async function loadRevisionCode(fnName, revisionName) {
     if (yamlDetails) { yamlDetails.open = !!data.config_yaml; }
 
     switchEditTab('code');
-    showToast(`ğŸ“¥ Loaded code from revision '${revisionName}'`, 'info');
+    showToast(`📥 Loaded code from revision '${revisionName}'`, 'info');
   } catch (err) {
     showToast(`Failed to load revision code: ${err.message}`, 'error');
   }
@@ -320,7 +322,7 @@ async function performRollback(fnName, revisionName) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `HTTP ${res.status}`);
     }
-    showToast(`âœ… Rolled back '${fnName}' to '${revisionName}'!`, 'success');
+    showToast(`✅ Rolled back '${fnName}' to '${revisionName}'!`, 'success');
     await loadRevisions(fnName);
     await loadFunctions();
   } catch (err) {
@@ -328,7 +330,7 @@ async function performRollback(fnName, revisionName) {
   }
 }
 
-// â”€â”€ Deploy Update from modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Deploy Update from modal ──────────────────────────────────
 async function submitEditDeploy() {
   if (!editModalFnName || !editModalEditor) return;
 
@@ -363,13 +365,13 @@ async function submitEditDeploy() {
     }
 
     closeEditModal();
-    showToast(`âš¡ Deploying update for '${editModalFnName}'...`, 'info');
+    showToast(`⚡ Deploying update for '${editModalFnName}'...`, 'info');
 
     clearLogs();
     resetDeployUI();
     document.getElementById('result-card').classList.remove('visible');
-    appendLog('step', `ğŸš€ Updating function: ${editModalFnName} (${editModalLanguage})`);
-    appendLog('muted', 'â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€');
+    appendLog('step', `🚀 Updating function: ${editModalFnName} (${editModalLanguage})`);
+    appendLog('muted', '─────────────────────────────────────────');
     setDeployLoading(true);
     setLogStatus('streaming', 'Streaming...');
 
@@ -395,25 +397,25 @@ async function submitEditDeploy() {
     }
   } catch (err) {
     if (btn) btn.disabled = false;
-    if (icon) { icon.className = ''; icon.textContent = 'âš¡'; }
+    if (icon) { icon.className = ''; icon.textContent = '⚡'; }
     showToast(`Update failed: ${err.message}`, 'error');
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 // CURL COPY & DELETE
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════════════════════
 async function copyCurl(url) {
   if (!url) { showToast('Function has no Live URL yet.', 'warn'); return; }
   const cmd = `curl -X POST ${url} -H "Content-Type: application/json" -d '{"name": "test"}'`;
   if (navigator.clipboard && window.isSecureContext) {
-    try { await navigator.clipboard.writeText(cmd); showToast('ğŸ“‹ cURL copied to clipboard!', 'success'); return; } catch (e) {}
+    try { await navigator.clipboard.writeText(cmd); showToast('📋 cURL copied to clipboard!', 'success'); return; } catch (e) {}
   }
   try {
     const ta = document.createElement("textarea");
     ta.value = cmd; ta.style.position = "fixed"; ta.style.left = "-9999px";
     document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-    showToast('ğŸ“‹ cURL copied to clipboard!', 'success');
+    showToast('📋 cURL copied to clipboard!', 'success');
   } catch (err) { showToast('Failed to copy', 'error'); }
 }
 
@@ -422,7 +424,7 @@ async function deleteFunction(name) {
   try {
     const res = await fetch(`${API_BASE}/functions/${encodeURIComponent(name)}`, { method: 'DELETE' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    showToast(`âœ… Function "${name}" deleted.`, 'success');
+    showToast(`✅ Function "${name}" deleted.`, 'success');
     await loadFunctions();
   } catch (err) { showToast(`Failed to delete "${name}": ${err.message}`, 'error'); }
 }
