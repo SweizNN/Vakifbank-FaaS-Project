@@ -145,66 +145,45 @@ async def deploy_pipeline(
         entrypoint.write_text(req.code, encoding="utf-8")
         yield sse_event("log", f"   → Wrote {len(req.code)} bytes to {entrypoint.name}")
 
-        # ── Step 2.5: Apply YAML config & save source state in annotations ──
-        # NOTE: We use RAW TEXT injection for func.yaml instead of yaml.load/dump.
-        # Reason: PyYAML parses the `created` timestamp field into a Python datetime
-        # object and re-serializes it WITHOUT the 'T' separator (e.g. "2026-08-04 07:32:15"
-        # instead of "2026-08-04T07:32:15Z"), which breaks func deploy's strict RFC3339 parser.
-        # By injecting annotations as raw text we leave every other field byte-for-byte intact.
+        # ── Step 2.5: Apply YAML config & save source state ──────────────────
+        # NOTE: func CLI v1.23.0 no longer allows custom top-level fields (like
+        # 'annotations') in func.yaml — it fails validation with "unknown field".
+        # We therefore store our state in a sidecar .faas-meta.json file which
+        # the func CLI ignores completely, and only touch func.yaml for envs/options.
         yield sse_event("step", "⚙️  Step 2.5/4 — Applying Configuration & Saving State")
         try:
-            import re
+            import json as _json
             import base64
+
+            # ── Persist state for Edit/Revision support ───────────────────────
+            meta = {
+                "lang": req.language,
+                "code_b64": base64.b64encode(req.code.encode("utf-8")).decode("utf-8"),
+            }
+            if req.config_yaml:
+                meta["yaml_b64"] = base64.b64encode(req.config_yaml.encode("utf-8")).decode("utf-8")
+
+            meta_path = fn_dir / ".faas-meta.json"
+            meta_path.write_text(_json.dumps(meta, indent=2), encoding="utf-8")
+            yield sse_event("log", "   → Saved function state to .faas-meta.json")
+
+            # ── Apply user envs/options to func.yaml (safe: only append blocks) ─
             func_yaml_path = fn_dir / "func.yaml"
-
-            if func_yaml_path.exists():
+            if req.config_yaml and func_yaml_path.exists():
+                import re
+                import yaml as _yaml
+                user_cfg = _yaml.safe_load(req.config_yaml) or {}
                 raw = func_yaml_path.read_text(encoding="utf-8")
-
-                # ── Build annotations dict to inject ──────────────────────────
-                encoded_code = base64.b64encode(req.code.encode("utf-8")).decode("utf-8")
-                new_annotations: dict[str, str] = {
-                    "faas.vakifbank.com/code-b64": encoded_code,
-                    "faas.vakifbank.com/lang": req.language,
-                }
-                if req.config_yaml:
-                    new_annotations["faas.vakifbank.com/yaml-b64"] = base64.b64encode(
-                        req.config_yaml.encode("utf-8")
-                    ).decode("utf-8")
-
-                # ── Serialize annotations as YAML block (2-space indent) ──────
-                ann_block_lines = ["annotations:"]
-                for k, v in new_annotations.items():
-                    ann_block_lines.append(f"  {k}: {v}")
-                ann_block = "\n".join(ann_block_lines)
-
-                # Replace existing annotations block if present, otherwise append
-                if re.search(r"^annotations:", raw, re.MULTILINE):
-                    # Remove old annotations block (key + all its indented children)
-                    raw = re.sub(
-                        r"^annotations:(\n  .*)*",
-                        ann_block,
-                        raw,
-                        flags=re.MULTILINE,
-                    )
-                else:
-                    raw = raw.rstrip("\n") + "\n" + ann_block + "\n"
-
-                # ── Apply user envs/options via safe text append if provided ──
-                if req.config_yaml:
-                    import yaml as _yaml
-                    user_cfg = _yaml.safe_load(req.config_yaml) or {}
-                    if "envs" in user_cfg or "options" in user_cfg:
-                        # These blocks are simple lists/maps — safe to append
-                        if "envs" in user_cfg and not re.search(r"^envs:", raw, re.MULTILINE):
-                            envs_lines = ["envs:"] + [f"- name: {e['name']}\n  value: {e.get('value','')}" for e in user_cfg["envs"]]
-                            raw = raw.rstrip("\n") + "\n" + "\n".join(envs_lines) + "\n"
-
-                func_yaml_path.write_text(raw, encoding="utf-8")
-                yield sse_event("log", "   → Successfully injected config & state into func.yaml")
-            else:
-                yield sse_event("log", "   → Warning: func.yaml not found, skipping config merge.")
+                if "envs" in user_cfg and not re.search(r"^envs:", raw, re.MULTILINE):
+                    envs_lines = ["envs:"]
+                    for e in user_cfg["envs"]:
+                        envs_lines.append(f"- name: {e['name']}")
+                        envs_lines.append(f"  value: {e.get('value', '')}")
+                    raw = raw.rstrip("\n") + "\n" + "\n".join(envs_lines) + "\n"
+                    func_yaml_path.write_text(raw, encoding="utf-8")
+                    yield sse_event("log", "   → Applied env vars to func.yaml")
         except Exception as e:
-            yield sse_event("error", f"❌ Failed to parse or apply YAML config: {str(e)}")
+            yield sse_event("error", f"❌ Failed to save state or apply config: {str(e)}")
             yield sse_event("done", json.dumps({"status": "error", "job_id": job_id}))
             return
 

@@ -1519,7 +1519,7 @@
     language: 'Node.js'
   };
 };`,
-      go: `func Handler(body map[string]interface{}) map[string]interface{} {
+      go: `func vakifbankHandler(body map[string]interface{}) map[string]interface{} {
 	name := "World"
 	if n, ok := body["name"].(string); ok && n != "" {
 		name = n
@@ -1663,7 +1663,7 @@ func Handle(ctx context.Context, res http.ResponseWriter, req *http.Request) {
 	json.NewDecoder(req.Body).Decode(&body)
 	if body == nil { body = make(map[string]interface{}) }
 
-	responseBody := Handler(body)
+	responseBody := vakifbankHandler(body)
 
 	res.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(res).Encode(responseBody)
