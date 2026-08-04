@@ -215,16 +215,24 @@ async def deploy_pipeline(
             return
 
         # ── Persist source state on the ksvc for Edit/Revision support ───────
-        # We annotate the Knative Service directly (not func.yaml) so the state
-        # survives workspace cleanup and can be retrieved later by /functions/{name}/code.
+        # We annotate the Knative Service directly so the state survives workspace
+        # cleanup and can be retrieved by /functions/{name}/code.
+        # snippet-b64 = raw editor content (before wrapCode) → shown on Edit
+        # code-b64    = full file written to entrypoint (fallback for old deploys)
         try:
             import base64 as _b64
-            import json as _json
+            import subprocess as _sp
+
+            # Prefer user_snippet (raw editor content); fall back to full code
+            snippet = req.user_snippet if req.user_snippet else req.code
+            encoded_snippet = _b64.b64encode(snippet.encode("utf-8")).decode("utf-8")
             encoded_code = _b64.b64encode(req.code.encode("utf-8")).decode("utf-8")
+
             annotate_args = [
                 "kubectl", "annotate", "ksvc", req.name,
                 "-n", TENANT_NAMESPACE,
                 "--overwrite",
+                f"faas.vakifbank.com/snippet-b64={encoded_snippet}",
                 f"faas.vakifbank.com/code-b64={encoded_code}",
                 f"faas.vakifbank.com/lang={req.language}",
             ]
@@ -232,12 +240,10 @@ async def deploy_pipeline(
                 encoded_yaml = _b64.b64encode(req.config_yaml.encode("utf-8")).decode("utf-8")
                 annotate_args.append(f"faas.vakifbank.com/yaml-b64={encoded_yaml}")
 
-            import subprocess as _sp
             ann_result = _sp.run(annotate_args, capture_output=True, text=True, timeout=30)
             if ann_result.returncode == 0:
                 yield sse_event("log", "   → Source state saved to ksvc annotations (Edit feature enabled)")
             else:
-                # Non-fatal: deployment succeeded, only edit feature is affected
                 yield sse_event("log", f"   ⚠️  Could not save state to ksvc: {ann_result.stderr.strip()[:120]}")
         except Exception as ann_exc:
             yield sse_event("log", f"   ⚠️  Annotation step skipped: {ann_exc}")

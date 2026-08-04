@@ -200,18 +200,23 @@ async def get_function_code(name: str):
         ksvc = json.loads(result.stdout)
         annotations = ksvc.get("metadata", {}).get("annotations", {})
         
+        # snippet-b64 = raw editor content (user-written only, preferred)
+        # code-b64    = full entrypoint file (fallback for older deploys)
+        snippet_b64 = annotations.get("faas.vakifbank.com/snippet-b64", "")
         code_b64 = annotations.get("faas.vakifbank.com/code-b64", "")
         lang = annotations.get("faas.vakifbank.com/lang", "")
         yaml_b64 = annotations.get("faas.vakifbank.com/yaml-b64", "")
         
-        if not code_b64:
+        display_b64 = snippet_b64 or code_b64   # prefer snippet, fall back to full code
+        
+        if not display_b64:
             # This function was deployed before the Edit feature existed
             raise HTTPException(
                 status_code=422,
                 detail=f"Function '{name}' was deployed before the Edit feature was added. Please delete and re-deploy it to enable editing."
             )
             
-        code = base64.b64decode(code_b64).decode("utf-8")
+        code = base64.b64decode(display_b64).decode("utf-8")
         config_yaml = base64.b64decode(yaml_b64).decode("utf-8") if yaml_b64 else ""
         
         return {

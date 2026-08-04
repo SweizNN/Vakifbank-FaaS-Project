@@ -1519,9 +1519,38 @@
     language: 'Node.js'
   };
 };`,
-      go: `	fmt.Fprintln(res, "Hello from VakıfBank FaaS! 👋")
-	// Tip: use req.Body to read JSON, res to write response
-	// Example: json.NewEncoder(res).Encode(map[string]string{"msg": "hi"})`,
+      go: `package function
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+type MyFunction struct{}
+
+func New() *MyFunction {
+	return &MyFunction{}
+}
+
+func (f *MyFunction) Handle(res http.ResponseWriter, req *http.Request) {
+	var body map[string]interface{}
+	json.NewDecoder(req.Body).Decode(&body)
+	if body == nil {
+		body = make(map[string]interface{})
+	}
+
+	name, _ := body["name"].(string)
+	if name == "" {
+		name = "World"
+	}
+
+	res.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(res).Encode(map[string]interface{}{
+		"message":  "Hello, " + name + "! 👋",
+		"platform": "VakıfBank FaaS",
+		"language": "Go",
+	})
+}`,
       typescript: `const handler = (body: any): any => {
   const name = body?.name || 'World';
   return {
@@ -1530,18 +1559,23 @@
     language: 'TypeScript'
   };
 };`,
-      quarkus: `    public java.util.Map<String, Object> handler(java.util.Map<String, Object> input) {
-        String name = "World";
-        if (input != null && input.containsKey("name")) {
-            name = input.get("name").toString();
-        }
-        
-        return java.util.Map.of(
-            "message", "Hello, " + name + "! 👋",
-            "platform", "VakıfBank FaaS",
-            "language", "Java (Quarkus)"
-        );
-    }`,
+      quarkus: `package functions;
+
+import io.quarkus.funqy.Funq;
+
+public class Function {
+
+    @Funq
+    public Output function(Input input) {
+        String name = (input != null && input.getMessage() != null)
+            ? input.getMessage() : "World";
+
+        Output out = new Output();
+        out.setMessage("Hello, " + name + "! 👋 from VakıfBank FaaS");
+        return out;
+    }
+
+}`,
       rust: `pub fn handler(body: serde_json::Value) -> serde_json::Value {
     let name = body.get("name")
                    .and_then(|v| v.as_str())
@@ -1638,24 +1672,9 @@ module.exports = { handle };
       }
       
       if (lang === 'go') {
-        return `package function
-
-import (
-	"net/http"
-)
-
-type MyFunction struct{}
-
-func New() *MyFunction {
-	return &MyFunction{}
-}
-
-func (f *MyFunction) Handle(res http.ResponseWriter, req *http.Request) {
-	// --- USER CODE START ---
-${userCode}
-	// --- USER CODE END ---
-}
-`;
+        // Go: user edits the full function.go file directly — no wrapper needed.
+        // The template already contains the complete valid Go file.
+        return userCode;
       }
 
       if (lang === 'typescript') {
@@ -1676,23 +1695,8 @@ export const handle = async (context: any, body: any) => {
       }
 
       if (lang === 'quarkus') {
-        const indented = userCode.split('\n').map(l => l ? '    ' + l : '').join('\n');
-        return `package functions;
-import io.quarkus.funqy.Funq;
-import java.util.Map;
-
-public class Function {
-// --- USER CODE START ---
-${indented}
-// --- USER CODE END ---
-
-    @Funq
-    public Map<String, Object> handle(Map<String, Object> input) {
-        if (input == null) input = java.util.Map.of();
-        return handler(input);
-    }
-}
-`;
+        // Quarkus: user edits the full Function.java file directly.
+        return userCode;
       }
 
       if (lang === 'rust') {
@@ -1750,9 +1754,9 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
     const TEMPLATE_MARKERS = {
       python: [ { from: 0, to: 0 } ],
       node: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
-      go: [ { from: 0, to: 0 }, { from: 11, to: 11 } ],
+      go: [],          // full-file edit
       typescript: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
-      quarkus: [ { from: 0, to: 0 }, { from: 11, to: 11 } ],
+      quarkus: [],     // full-file edit
       rust: [ { from: 0, to: 0 }, { from: 9, to: 9 } ]
     };
 
@@ -1871,7 +1875,7 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
         const response = await fetch(`${API_BASE}/deploy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, language, code: wrapCode(language, code), config_yaml, is_update: isUpdateMode }),
+          body: JSON.stringify({ name, language, code: wrapCode(language, code), user_snippet: code, config_yaml, is_update: isUpdateMode }),
         });
 
         if (!response.ok) {

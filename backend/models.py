@@ -17,6 +17,7 @@ class DeployRequest(BaseModel):
     name: str = Field(..., min_length=3, max_length=50)
     language: str
     code: str = Field(..., min_length=5)
+    user_snippet: Optional[str] = Field(None)   # raw editor content before wrapCode
     config_yaml: Optional[str] = Field(None)
     description: Optional[str] = Field(None, max_length=200)
     is_update: bool = False
