@@ -1519,18 +1519,9 @@
     language: 'Node.js'
   };
 };`,
-      go: `func vakifbankHandler(body map[string]interface{}) map[string]interface{} {
-	name := "World"
-	if n, ok := body["name"].(string); ok && n != "" {
-		name = n
-	}
-	
-	return map[string]interface{}{
-		"message":  "Hello, " + name + "! 👋",
-		"platform": "VakıfBank FaaS",
-		"language": "Go",
-	}
-}`,
+      go: `	fmt.Fprintln(res, "Hello from VakıfBank FaaS! 👋")
+	// Tip: use req.Body to read JSON, res to write response
+	// Example: json.NewEncoder(res).Encode(map[string]string{"msg": "hi"})`,
       typescript: `const handler = (body: any): any => {
   const name = body?.name || 'World';
   return {
@@ -1648,25 +1639,21 @@ module.exports = { handle };
       
       if (lang === 'go') {
         return `package function
+
 import (
-	"context"
-	"encoding/json"
 	"net/http"
 )
 
-// --- USER CODE START ---
+type MyFunction struct{}
+
+func New() *MyFunction {
+	return &MyFunction{}
+}
+
+func (f *MyFunction) Handle(res http.ResponseWriter, req *http.Request) {
+	// --- USER CODE START ---
 ${userCode}
-// --- USER CODE END ---
-
-func Handle(ctx context.Context, res http.ResponseWriter, req *http.Request) {
-	var body map[string]interface{}
-	json.NewDecoder(req.Body).Decode(&body)
-	if body == nil { body = make(map[string]interface{}) }
-
-	responseBody := vakifbankHandler(body)
-
-	res.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(res).Encode(responseBody)
+	// --- USER CODE END ---
 }
 `;
       }
@@ -1728,7 +1715,7 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
     const LANG_META = {
       python: { label: 'python · func.py', mode: 'python' },
       node: { label: 'javascript · index.js', mode: 'javascript' },
-      go: { label: 'go · handle.go', mode: 'text/x-go' },
+      go: { label: 'go · function.go', mode: 'text/x-go' },
       typescript: { label: 'typescript · index.ts', mode: 'javascript' },
       quarkus: { label: 'java · Function.java', mode: null },
       rust: { label: 'rust · src/main.rs', mode: null },
