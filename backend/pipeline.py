@@ -118,7 +118,7 @@ async def deploy_pipeline(
         yield sse_event("step", f"📦 Step 1/4 — Creating function scaffold: '{req.name}' ({req.language})")
         logger.info("[%s] func create -l %s %s", job_id, lang_cfg["template"], req.name)
 
-        create_cmd = ["func", "create", "-l", lang_cfg["template"], req.name]
+        create_cmd = ["func", "create", "--language", lang_cfg["template"], req.name]
         last_exit = 0
         async for frame in stream_subprocess(create_cmd, cwd=str(work_dir)):
             if "exit_code" in frame:
@@ -175,7 +175,7 @@ async def deploy_pipeline(
                 elif "faas.vakifbank.com/yaml-b64" in func_cfg["annotations"]:
                     del func_cfg["annotations"]["faas.vakifbank.com/yaml-b64"]
 
-                func_yaml_path.write_text(yaml.safe_dump(func_cfg), encoding="utf-8")
+                func_yaml_path.write_text(yaml.safe_dump(func_cfg, default_flow_style=False, sort_keys=False), encoding="utf-8")
                 yield sse_event("log", "   → Successfully injected config & state into func.yaml")
             else:
                 yield sse_event("log", "   → Warning: func.yaml not found, skipping config merge.")

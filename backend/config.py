@@ -44,7 +44,7 @@ LANGUAGE_CONFIG: dict[str, dict] = {
     },
     "go": {
         "template": "go",
-        "entrypoint": "function.go",
+        "entrypoint": "handle.go",
         "description": "Go 1.21 — handle.go → func Handle(ctx context.Context, ...) error",
     },
     "typescript": {
