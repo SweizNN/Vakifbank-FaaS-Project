@@ -40,7 +40,7 @@ from config import (
     logger,
 )
 from health_check import run_all_checks
-from k8s import kubectl, list_ksvc
+from k8s import kubectl, list_ksvc, get_revisions, rollback_to_revision
 from models import DeleteResponse, DeployRequest, ProxyRequest
 from pipeline import deploy_jobs, deploy_pipeline
 
@@ -236,6 +236,62 @@ async def get_function_code(name: str):
     except Exception as e:
         logger.error("[get_function_code] Unexpected error for '%s': %s", name, e)
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+
+@app.get("/functions/{name}/revisions", summary="List all revisions for a function")
+async def list_function_revisions(name: str):
+    """Return all Knative Revisions for a function, newest first, with code metadata."""
+    if not re.match(r"^[a-z][a-z0-9-]{2,49}$", name):
+        raise HTTPException(status_code=400, detail="Invalid function name format.")
+    revisions = get_revisions(name)
+    return {"function_name": name, "revisions": revisions}
+
+
+@app.post("/functions/{name}/rollback", summary="Roll back traffic to a specific revision")
+async def rollback_function(name: str, body: dict):
+    """Patch the Knative Service to point 100% traffic to a specific revision."""
+    revision_name = body.get("revision_name", "")
+    if not revision_name:
+        raise HTTPException(status_code=400, detail="revision_name is required.")
+    if not re.match(r"^[a-z][a-z0-9-]{2,49}$", name):
+        raise HTTPException(status_code=400, detail="Invalid function name format.")
+
+    success, message = rollback_to_revision(name, revision_name)
+    if not success:
+        raise HTTPException(status_code=500, detail=f"Rollback failed: {message}")
+    return {"status": "ok", "message": message, "function_name": name, "revision_name": revision_name}
+
+
+@app.get("/functions/{name}/revision/{revision_name}/code", summary="Get code saved in a specific revision")
+async def get_revision_code(name: str, revision_name: str):
+    """Retrieve source code and config from a specific Knative Revision's annotations."""
+    try:
+        result = subprocess.run(
+            ["kubectl", "get", "revision", revision_name, "-n", TENANT_NAMESPACE, "-o", "json"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=404, detail=f"Revision '{revision_name}' not found.")
+
+        rev = json.loads(result.stdout)
+        annotations = rev.get("metadata", {}).get("annotations", {})
+        snippet_b64 = annotations.get("faas.vakifbank.com/snippet-b64", "")
+        code_b64 = annotations.get("faas.vakifbank.com/code-b64", "")
+        lang = annotations.get("faas.vakifbank.com/lang", "")
+        yaml_b64 = annotations.get("faas.vakifbank.com/yaml-b64", "")
+
+        display_b64 = snippet_b64 or code_b64
+        if not display_b64:
+            raise HTTPException(status_code=422, detail="This revision has no saved code (deployed before Edit feature).")
+
+        code = base64.b64decode(display_b64).decode("utf-8")
+        config_yaml = base64.b64decode(yaml_b64).decode("utf-8") if yaml_b64 else ""
+        return {"name": name, "revision_name": revision_name, "language": lang, "code": code, "config_yaml": config_yaml}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.delete("/functions/{name}", response_model=DeleteResponse, summary="Delete a function")

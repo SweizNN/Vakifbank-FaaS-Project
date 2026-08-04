@@ -842,6 +842,132 @@ select option {
   justify-content: flex-end;
 }
 
+/* ── Edit modal — wider to comfortably fit a code editor ── */
+.edit-modal {
+  max-width: 780px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-modal .modal-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.edit-tab-panel {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Tab bar */
+.edit-modal-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--border-hairline);
+  padding: 0 12px;
+  gap: 4px;
+  background: var(--bg-glass-soft);
+  flex-shrink: 0;
+}
+
+.edit-tab {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+  margin-bottom: -2px;
+}
+
+.edit-tab:hover {
+  color: var(--text-primary);
+}
+
+.edit-tab.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+}
+
+/* Language badge inside edit modal */
+.edit-lang-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+  color: var(--accent-blue);
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 35%, transparent);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+/* Revision list */
+.revision-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-hairline);
+  margin-bottom: 8px;
+  background: var(--bg-glass-soft);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.revision-row:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border);
+}
+
+.revision-row.active-revision {
+  border-color: var(--accent-green);
+  background: color-mix(in srgb, var(--accent-green) 6%, var(--bg-card));
+}
+
+.revision-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.revision-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.revision-active-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--accent-green);
+  color: #fff;
+  white-space: nowrap;
+}
+
+/* CodeMirror inside edit modal should fill its wrapper */
+#edit-codemirror-wrapper .CodeMirror {
+  height: 260px;
+  font-size: 13px;
+}
+
+
+
 .btn-sm {
   padding: 7px 16px;
   font-size: 12px;

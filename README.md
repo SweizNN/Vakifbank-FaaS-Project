@@ -77,7 +77,7 @@ Vakifbank-FaaS-Project/
 
 | Layer | Technology |
 |-------|------------|
-| Infrastructure | Kubernetes (k3s), Knative Serving |
+| Infrastructure | Kubernetes, Knative Serving, Docker |
 | Function Deployment | Knative `func` CLI + Cloud Native Buildpacks |
 | Backend | Python 3.11, FastAPI, uvicorn |
 | Frontend | HTML5, Vanilla JS, CodeMirror editor |
@@ -119,7 +119,7 @@ git push origin main
 ```
 
 The pipeline will:
-1. **Test** — lint + syntax check Python code
+1. **Test** — lint + syntax + unit + integration tests for Python code
 2. **Build** — build `sweizn/faas-platform-api:sha-XXXXXXX` and push to Docker Hub
 3. **Deploy** — SSH into the droplet, apply manifests, rollout the new image
 

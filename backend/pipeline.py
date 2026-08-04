@@ -239,23 +239,46 @@ async def deploy_pipeline(
             encoded_snippet = _b64.b64encode(snippet.encode("utf-8")).decode("utf-8")
             encoded_code = _b64.b64encode(req.code.encode("utf-8")).decode("utf-8")
 
-            annotate_args = [
-                "kubectl", "annotate", "ksvc", req.name,
-                "-n", TENANT_NAMESPACE,
-                "--overwrite",
+            annotation_pairs = [
                 f"faas.vakifbank.com/snippet-b64={encoded_snippet}",
                 f"faas.vakifbank.com/code-b64={encoded_code}",
                 f"faas.vakifbank.com/lang={req.language}",
             ]
             if req.config_yaml:
                 encoded_yaml = _b64.b64encode(req.config_yaml.encode("utf-8")).decode("utf-8")
-                annotate_args.append(f"faas.vakifbank.com/yaml-b64={encoded_yaml}")
+                annotation_pairs.append(f"faas.vakifbank.com/yaml-b64={encoded_yaml}")
 
-            ann_result = _sp.run(annotate_args, capture_output=True, text=True, timeout=30)
+            # Annotate the ksvc (for /functions/{name}/code compatibility)
+            annotate_ksvc = [
+                "kubectl", "annotate", "ksvc", req.name,
+                "-n", TENANT_NAMESPACE,
+                "--overwrite",
+                *annotation_pairs,
+            ]
+            ann_result = _sp.run(annotate_ksvc, capture_output=True, text=True, timeout=30)
             if ann_result.returncode == 0:
                 yield sse_event("log", "   → Source state saved to ksvc annotations (Edit feature enabled)")
             else:
                 yield sse_event("log", f"   ⚠️  Could not save state to ksvc: {ann_result.stderr.strip()[:120]}")
+
+            # Also annotate the latest Revision so each revision retains its own code
+            # (used by the Revision History / Rollback modal)
+            rev_result = _sp.run(
+                ["kubectl", "get", "ksvc", req.name, "-n", TENANT_NAMESPACE,
+                 "-o", "jsonpath={.status.latestCreatedRevisionName}"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if rev_result.returncode == 0 and rev_result.stdout.strip():
+                latest_revision = rev_result.stdout.strip()
+                annotate_rev = [
+                    "kubectl", "annotate", "revision", latest_revision,
+                    "-n", TENANT_NAMESPACE,
+                    "--overwrite",
+                    *annotation_pairs,
+                ]
+                _sp.run(annotate_rev, capture_output=True, text=True, timeout=30)
+                yield sse_event("log", f"   → Code saved to revision '{latest_revision}' for history tracking")
+
         except Exception as ann_exc:
             yield sse_event("log", f"   ⚠️  Annotation step skipped: {ann_exc}")
 

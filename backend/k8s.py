@@ -82,3 +82,83 @@ def list_ksvc(namespace: str = TENANT_NAMESPACE) -> list[dict]:
             ),
         })
     return services
+
+
+def get_revisions(name: str, namespace: str = TENANT_NAMESPACE) -> list[dict]:
+    """
+    Return a list of Knative Revisions for a given Service, newest first.
+    Each dict contains the revision name, creation time, whether it is currently
+    receiving 100% traffic, and any faas.vakifbank.com annotations saved during deploy.
+    """
+    # Fetch traffic config from the ksvc so we know the current active revision
+    ksvc_result = kubectl("get", "ksvc", name, "-n", namespace, "-o", "json", timeout=15)
+    current_traffic_revision = ""
+    if ksvc_result.returncode == 0:
+        try:
+            ksvc_data = json.loads(ksvc_result.stdout)
+            traffic = ksvc_data.get("status", {}).get("traffic", [])
+            for t in traffic:
+                if t.get("percent", 0) == 100:
+                    current_traffic_revision = t.get("revisionName", "")
+                    break
+        except Exception:
+            pass
+
+    result = kubectl(
+        "get", "revisions",
+        "-n", namespace,
+        "-l", f"serving.knative.dev/service={name}",
+        "-o", "json",
+        "--sort-by=.metadata.creationTimestamp",
+        timeout=20,
+    )
+    if result.returncode != 0:
+        return []
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return []
+
+    revisions = []
+    for item in reversed(data.get("items", [])):  # newest first
+        meta = item.get("metadata", {})
+        annotations = meta.get("annotations", {})
+        rev_name = meta.get("name", "")
+        revisions.append({
+            "name": rev_name,
+            "created_at": meta.get("creationTimestamp", ""),
+            "is_active": rev_name == current_traffic_revision,
+            "has_code": bool(annotations.get("faas.vakifbank.com/snippet-b64") or
+                             annotations.get("faas.vakifbank.com/code-b64")),
+            "language": annotations.get("faas.vakifbank.com/lang", ""),
+            "snippet_b64": annotations.get("faas.vakifbank.com/snippet-b64", ""),
+            "code_b64": annotations.get("faas.vakifbank.com/code-b64", ""),
+            "yaml_b64": annotations.get("faas.vakifbank.com/yaml-b64", ""),
+        })
+    return revisions
+
+
+def rollback_to_revision(service_name: str, revision_name: str, namespace: str = TENANT_NAMESPACE) -> tuple[bool, str]:
+    """
+    Point 100% of traffic for `service_name` to `revision_name`.
+    Returns (success: bool, message: str).
+    """
+    patch = json.dumps({
+        "spec": {
+            "traffic": [
+                {"revisionName": revision_name, "percent": 100, "latestRevision": False}
+            ]
+        }
+    })
+    result = kubectl(
+        "patch", "ksvc", service_name,
+        "-n", namespace,
+        "--type=merge",
+        "-p", patch,
+        timeout=30,
+    )
+    if result.returncode == 0:
+        return True, f"Traffic switched to revision '{revision_name}'."
+    return False, result.stderr.strip()[:300]
+
