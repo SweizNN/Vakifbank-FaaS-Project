@@ -177,21 +177,11 @@ async def deploy_pipeline(
             meta_path.write_text(_json.dumps(meta, indent=2), encoding="utf-8")
             yield sse_event("log", "   → Saved function state to .faas-meta.json")
 
-            # ── Apply user envs/options to func.yaml (safe: only append blocks) ─
-            func_yaml_path = fn_dir / "func.yaml"
-            if req.config_yaml and func_yaml_path.exists():
-                import re
-                import yaml as _yaml
-                user_cfg = _yaml.safe_load(req.config_yaml) or {}
-                raw = func_yaml_path.read_text(encoding="utf-8")
-                if "envs" in user_cfg and not re.search(r"^envs:", raw, re.MULTILINE):
-                    envs_lines = ["envs:"]
-                    for e in user_cfg["envs"]:
-                        envs_lines.append(f"- name: {e['name']}")
-                        envs_lines.append(f"  value: {e.get('value', '')}")
-                    raw = raw.rstrip("\n") + "\n" + "\n".join(envs_lines) + "\n"
-                    func_yaml_path.write_text(raw, encoding="utf-8")
-                    yield sse_event("log", "   → Applied env vars to func.yaml")
+            # ── Apply user envs/options ─────────────────────────────────────────
+            # In func CLI v1.23+, envs shouldn't be appended to func.yaml root.
+            # We will pass them as --env arguments to 'func deploy' in Step 3.
+            if req.config_yaml:
+                yield sse_event("log", "   → Parsed YAML configuration (will apply via deploy args)")
         except Exception as e:
             yield sse_event("error", f"❌ Failed to save state or apply config: {str(e)}")
             yield sse_event("done", json.dumps({"status": "error", "job_id": job_id}))
@@ -209,6 +199,17 @@ async def deploy_pipeline(
             "--builder", "pack",
             "--image", fn_image,
         ]
+
+        if req.config_yaml:
+            try:
+                import yaml as _yaml
+                user_cfg = _yaml.safe_load(req.config_yaml) or {}
+                if "envs" in user_cfg:
+                    for e in user_cfg["envs"]:
+                        val = e.get("value", "")
+                        deploy_cmd.extend(["--env", f"{e['name']}={val}"])
+            except Exception:
+                pass
 
         last_exit = 0
         async for frame in stream_subprocess(deploy_cmd, cwd=str(fn_dir)):
