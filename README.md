@@ -89,15 +89,14 @@ FaaS Platform uses a modern GitOps approach. You do **not** need to manually dow
 If you have a brand new, empty Ubuntu server (e.g. a DigitalOcean Droplet), you can install Kubernetes, Knative, and deploy the entire FaaS platform with this single command:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/<YOUR_GITHUB_USERNAME>/Vakifbank-FaaS-Project/main/setup_server.sh | bash
+curl -sL https://raw.githubusercontent.com/sweiznn/Vakifbank-FaaS-Project/main/setup_server.sh | bash
 ```
-*(⚠️ Don't forget to replace `<YOUR_GITHUB_USERNAME>` with your actual GitHub username!)*
 
 #### 2. Manual Update (Kustomize / GitOps)
 If the server is already running and you just want to pull your latest configuration changes directly from GitHub without triggering CI/CD, run:
 
 ```bash
-kubectl apply -k https://github.com/<YOUR_GITHUB_USERNAME>/Vakifbank-FaaS-Project/k8s
+kubectl apply -k https://github.com/sweiznn/Vakifbank-FaaS-Project/k8s
 ```
 
 ### Deploy via GitHub Actions

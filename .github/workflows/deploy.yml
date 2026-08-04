@@ -55,7 +55,7 @@ jobs:
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-test.txt
           pip install flake8 pyflakes
 
       - name: "🔍 Lint Check (flake8)"
@@ -68,27 +68,10 @@ jobs:
             --show-source \
             --statistics
 
-      - name: "💨 Import Smoke Test"
+      - name: "🧪 Run pytest (Unit & Integration)"
         working-directory: backend
         run: |
-          # Verify imports load without runtime errors
-          python -c "
-          import sys
-          import importlib.util
-
-          for module in ['health_check']:
-              spec = importlib.util.spec_from_file_location(module, f'{module}.py')
-              mod = importlib.util.module_from_spec(spec)
-              try:
-                  spec.loader.exec_module(mod)
-                  print(f'✅ {module} — import OK')
-              except SystemExit:
-                  # health_check.py calls sys.exit() — that's expected
-                  print(f'✅ {module} — import OK (graceful exit)')
-              except Exception as e:
-                  print(f'❌ {module} — import FAILED: {e}')
-                  sys.exit(1)
-          "
+          pytest tests/ -v --cov=.
 
       - name: "📝 Validate k8s Manifests (dry-run)"
         run: |
