@@ -17,17 +17,37 @@ const TEMPLATES = {
     language: 'Node.js'
   };
 };`,
-  go: `func vakifbankHandler(body map[string]interface{}) map[string]interface{} {
+  go: `package function
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+type MyFunction struct{}
+
+func New() *MyFunction {
+	return &MyFunction{}
+}
+
+func (f *MyFunction) Handle(res http.ResponseWriter, req *http.Request) {
+	var body map[string]interface{}
+	json.NewDecoder(req.Body).Decode(&body)
+	if body == nil {
+		body = make(map[string]interface{})
+	}
+
 	name, _ := body["name"].(string)
 	if name == "" {
 		name = "World"
 	}
 
-	return map[string]interface{}{
+	res.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(res).Encode(map[string]interface{}{
 		"message":  "Hello, " + name + "! 👋",
 		"platform": "VakıfBank FaaS",
 		"language": "Go",
-	}
+	})
 }`,
   typescript: `const handler = (body: any): any => {
   const name = body?.name || 'World';
@@ -37,13 +57,22 @@ const TEMPLATES = {
     language: 'TypeScript'
   };
 };`,
-  quarkus: `private Output vakifbankHandler(Input input) {
-    String name = (input != null && input.getMessage() != null)
-        ? input.getMessage() : "World";
+  quarkus: `package functions;
 
-    Output out = new Output();
-    out.setMessage("Hello, " + name + "! 👋 from VakıfBank FaaS");
-    return out;
+import io.quarkus.funqy.Funq;
+
+public class Function {
+
+    @Funq
+    public Output function(Input input) {
+        String name = (input != null && input.getMessage() != null)
+            ? input.getMessage() : "World";
+
+        Output out = new Output();
+        out.setMessage("Hello, " + name + "! 👋 from VakıfBank FaaS");
+        return out;
+    }
+
 }`,
   rust: `pub fn handler(body: serde_json::Value) -> serde_json::Value {
     let name = body.get("name")
@@ -141,39 +170,8 @@ module.exports = { handle };
   }
 
   if (lang === 'go') {
-    // Go needs the func CLI v1.23 "instanced" pattern (type + New() + method)
-    // as the real entrypoint — generate that boilerplate here and inject the
-    // user's plain handler function into it.
-    return `package function
-
-import (
-	"encoding/json"
-	"net/http"
-)
-
-// --- USER CODE START ---
-${userCode}
-// --- USER CODE END ---
-
-type MyFunction struct{}
-
-func New() *MyFunction {
-	return &MyFunction{}
-}
-
-func (f *MyFunction) Handle(res http.ResponseWriter, req *http.Request) {
-	var body map[string]interface{}
-	json.NewDecoder(req.Body).Decode(&body)
-	if body == nil {
-		body = make(map[string]interface{})
-	}
-
-	responseBody := vakifbankHandler(body)
-
-	res.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(res).Encode(responseBody)
-}
-`;
+    // Go: user edits the full function.go file directly.
+    return userCode;
   }
 
   if (lang === 'typescript') {
@@ -194,28 +192,8 @@ export const handle = async (context: any, body: any) => {
   }
 
   if (lang === 'quarkus') {
-    // Quarkus Funqy requires the entrypoint method to be
-    // `@Funq public Output function(Input input)` matching the scaffolded
-    // Input/Output POJOs — generate that boilerplate here and inject the
-    // user's helper method into the class body.
-    const indented = userCode.split('\n').map(l => l ? '    ' + l : '').join('\n');
-    return `package functions;
-
-import io.quarkus.funqy.Funq;
-
-public class Function {
-
-    // --- USER CODE START ---
-${indented}
-    // --- USER CODE END ---
-
-    @Funq
-    public Output function(Input input) {
-        return vakifbankHandler(input);
-    }
-
-}
-`;
+    // Quarkus: user edits the full Function.java file directly.
+    return userCode;
   }
 
   if (lang === 'rust') {
@@ -247,9 +225,9 @@ const LANG_META = {
 const TEMPLATE_MARKERS = {
   python: [ { from: 0, to: 0 } ],
   node: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
-  go: [ { from: 0, to: 0 }, { from: 11, to: 11 } ],
+  go: [ { from: 0, to: 19 }, { from: 25, to: 31 } ],
   typescript: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
-  quarkus: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
+  quarkus: [ { from: 0, to: 7 }, { from: 11, to: 16 } ],
   rust: [ { from: 0, to: 0 }, { from: 9, to: 9 } ]
 };
 

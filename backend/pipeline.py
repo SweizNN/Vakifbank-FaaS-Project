@@ -144,6 +144,16 @@ async def deploy_pipeline(
         entrypoint.parent.mkdir(parents=True, exist_ok=True)
         entrypoint.write_text(req.code, encoding="utf-8")
         yield sse_event("log", f"   → Wrote {len(req.code)} bytes to {entrypoint.name}")
+        
+        import shutil
+        # Cleanup conflicting auto-generated files to prevent signature/test errors
+        if req.language == "go":
+            for f in ["handle.go", "handle_test.go", "function_test.go"]:
+                if (fn_dir / f).exists():
+                    (fn_dir / f).unlink()
+        elif req.language == "quarkus":
+            if (fn_dir / "src" / "test").exists():
+                shutil.rmtree(fn_dir / "src" / "test")
 
         # ── Step 2.5: Apply YAML config & save source state ──────────────────
         # NOTE: func CLI v1.23.0 no longer allows custom top-level fields (like
