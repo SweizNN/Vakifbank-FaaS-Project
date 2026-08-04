@@ -4,9 +4,6 @@ __pycache__/
 *$py.class
 *.pyo
 .Python
-.pytest_cache/
-.coverage
-
 
 # ── Virtual environments ──────────────────────────────────────────────────────
 .venv/

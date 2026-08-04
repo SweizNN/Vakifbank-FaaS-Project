@@ -8,6 +8,15 @@
   <meta name="description"
     content="VakıfBank Internal Developer Platform: Deploy serverless functions on Knative with zero configuration. Paste code, select language, go live instantly." />
 
+  <!-- Apply saved/system theme before first paint to avoid a flash of the wrong theme -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem('faas-theme');
+      var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -52,6 +61,8 @@
           <span class="status-dot" id="global-status-dot" aria-hidden="true"></span>
           <span id="global-status-text">Checking...</span>
         </button>
+        <button class="btn btn-ghost btn-sm theme-toggle-btn" onclick="toggleTheme()" id="theme-toggle-btn"
+          aria-label="Toggle dark mode">🌙</button>
         <button class="btn btn-ghost btn-sm" onclick="loadFunctions()" id="refresh-btn"
           aria-label="Refresh function list">
           ↻ Refresh
@@ -301,6 +312,7 @@
   <!-- App logic, split into focused modules (loaded in dependency order) -->
   <script src="/static/js/config.js"></script>
   <script src="/static/js/templates.js"></script>
+  <script src="/static/js/theme.js"></script>
   <script src="/static/js/editor.js"></script>
   <script src="/static/js/deploy.js"></script>
   <script src="/static/js/functions.js"></script>

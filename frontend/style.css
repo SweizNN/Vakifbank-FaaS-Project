@@ -1,11 +1,15 @@
 /* ═══════════════════════════════════════════════════════════════
-   DESIGN TOKENS — Neo-Brutalist
-   Warm paper background, solid black borders, hard offset shadows,
-   flat colors (no gradients, no blur/glow). Variable NAMES below are
-   kept stable even where unused internally, because index.html and
-   the js/ files reference several of them directly via inline
-   style="...var(--x)..." — renaming any of those would silently
-   break inline styling.
+   DESIGN TOKENS — Soft Neo-Brutalist (light + dark)
+   Warm paper background, solid borders, offset shadows, flat colors
+   (no gradients/blur-glow). Variable NAMES below are kept stable even
+   where unused internally, because index.html and the js/ files
+   reference several of them directly via inline style="...var(--x)..."
+   — renaming any of those would silently break inline styling.
+
+   Dark mode overrides the same variable names under
+   [data-theme="dark"], so every rule in this file that already uses
+   var(--x) re-themes automatically — no other selector needs to know
+   about light/dark at all.
 ═══════════════════════════════════════════════════════════════ */
 :root {
   --bg-deep: #f1ead8;
@@ -29,20 +33,45 @@
   --text-muted: #8c8570;
   --text-code: #eaf6f0;
 
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-xl: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 
-  --shadow-card: 6px 6px 0 var(--border);
-  --shadow-card-lift: 9px 9px 0 var(--border);
-  --shadow-btn: 4px 4px 0 var(--border);
+  --shadow-card: 6px 6px 2px var(--border);
+  --shadow-card-lift: 9px 9px 4px var(--border);
+  --shadow-btn: 4px 4px 2px var(--border);
   --shadow-btn-press: 1px 1px 0 var(--border);
 
   --font-ui: 'Space Grotesk', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
-  --transition: 0.1s ease;
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-theme: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* ── Dark mode — darker surfaces, brighter/higher-contrast borders ── */
+:root[data-theme="dark"] {
+  --bg-deep: #0a0a07;
+  --bg-surface: #16160f;
+  --bg-card: #16160f;
+  --bg-card-hover: #221f13;
+  --bg-input: #100f0a;
+  --border: #f1ead8;
+  --border-glow: #f1ead8;
+
+  --accent-blue: #7ea2ff;
+  --accent-indigo: #7ea2ff;
+  --accent-violet: #b9a6ff;
+  --accent-green: #3ddc73;
+  --accent-red: #ff7a6e;
+  --accent-amber: #ffc53d;
+  --accent-cyan: #3fe0da;
+
+  --text-primary: #f5f1e6;
+  --text-secondary: #cdc6ac;
+  --text-muted: #948d76;
+  --text-code: #eaf6f0;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -67,6 +96,7 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   line-height: 1.6;
+  transition: var(--transition-theme);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -115,6 +145,13 @@ body {
   top: 0;
   background: var(--bg-deep);
   z-index: 100;
+  transition: var(--transition-theme);
+}
+
+.theme-toggle-btn {
+  padding: 8px 12px;
+  font-size: 15px;
+  line-height: 1;
 }
 
 .header-brand {
@@ -549,16 +586,17 @@ select option {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(20, 20, 15, 0.6);
   display: none; align-items: center; justify-content: center;
-  z-index: 9999; opacity: 0; transition: opacity 0.15s;
+  z-index: 9999; opacity: 0; transition: opacity 0.25s ease;
 }
 .modal-overlay.active { display: flex; opacity: 1; }
 .modal {
   background: var(--bg-card); border: 3px solid var(--border);
   border-radius: var(--radius-lg); width: 100%; max-width: 600px;
-  box-shadow: 10px 10px 0 var(--border); overflow: hidden;
-  transform: translateY(20px); transition: transform 0.15s;
+  box-shadow: 10px 10px 4px var(--border); overflow: hidden;
+  opacity: 0; transform: translateY(16px) scale(0.97);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease, background-color 0.3s ease, border-color 0.3s ease;
 }
-.modal-overlay.active .modal { transform: translateY(0); }
+.modal-overlay.active .modal { opacity: 1; transform: translateY(0) scale(1); }
 .modal-header {
   padding: 16px 20px; border-bottom: 3px solid var(--border);
   display: flex; justify-content: space-between; align-items: center;
@@ -617,6 +655,7 @@ select option {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  transition: border-color 0.3s ease;
 }
 
 .log-topbar {
@@ -627,6 +666,7 @@ select option {
   border-bottom: 3px solid var(--border);
   background: #201f18;
   flex-shrink: 0;
+  transition: border-color 0.3s ease;
 }
 
 .log-title {
@@ -765,6 +805,7 @@ select option {
   border: 3px solid var(--border);
   border-radius: var(--radius-md);
   padding: 12px 14px;
+  transition: border-color 0.3s ease;
 }
 
 .result-url-text {
@@ -833,6 +874,7 @@ select option {
   border: 3px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  transition: var(--transition-theme);
 }
 
 table {
@@ -949,6 +991,7 @@ tbody td {
   border-radius: var(--radius-lg);
   overflow: hidden;
   margin-top: 24px;
+  transition: var(--transition-theme);
 }
 
 .health-toggle {
@@ -1105,12 +1148,12 @@ tbody td {
   display: flex;
   align-items: center;
   gap: 10px;
-  animation: toastSlide 0.2s ease;
+  animation: toastSlide 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   background: var(--bg-card);
   border: 2px solid var(--border);
   border-left: 6px solid var(--border);
   color: var(--text-primary);
-  box-shadow: 4px 4px 0 var(--border);
+  box-shadow: 4px 4px 2px var(--border);
 }
 
 @keyframes toastSlide {
