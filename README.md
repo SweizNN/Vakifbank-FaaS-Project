@@ -53,7 +53,16 @@ Vakifbank-FaaS-Project/
 │   └── Dockerfile              # Multi-stage build (Python + kubectl + func CLI)
 │
 ├── frontend/
-│   └── index.html              # Single-file UI (served by FastAPI)
+│   ├── index.html              # UI markup (served by FastAPI at /)
+│   ├── style.css                # UI styles (served at /static/style.css)
+│   └── js/                      # UI logic, split by concern (served at /static/js/*.js)
+│       ├── config.js            # Shared globals (API_BASE, editor, state)
+│       ├── templates.js         # Language code templates + wrapCode() + readonly markers
+│       ├── editor.js            # CodeMirror init, template loading, file upload
+│       ├── deploy.js            # Deploy form + SSE log streaming
+│       ├── functions.js         # Deployed functions table, edit/delete/test
+│       ├── health.js            # System health panel
+│       └── utils.js             # Toast notifications, small DOM helpers
 │
 ├── k8s/
 │   ├── namespace.yaml          # faas-platform + tenant-functions + RBAC

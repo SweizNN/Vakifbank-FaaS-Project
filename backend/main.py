@@ -29,6 +29,7 @@ if sys.platform == "win32":
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from config import (
     FRONTEND_PATH,
@@ -83,6 +84,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# index.html references its CSS/JS as /static/... — serve everything else in
+# frontend/ (style.css, js/*.js) from there. index.html itself is returned by
+# the explicit route below, not through this mount.
+app.mount("/static", StaticFiles(directory=FRONTEND_PATH.parent), name="static")
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
