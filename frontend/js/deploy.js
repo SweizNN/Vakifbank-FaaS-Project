@@ -62,9 +62,15 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
 function handleSSEEvent(event, data, fnName) {
   switch (event) {
     case 'step': appendLog('step', data); pushFullLog(data); updateStages(data); break;
-    // Raw build/lifecycle output (can be very verbose — e.g. --verbose buildpack
-    // logs) only goes into the Full Log modal, keeping the main panel readable.
-    case 'log': pushFullLog(data); break;
+    case 'log':
+      pushFullLog(data);
+      // Lines prefixed with "| " are the underlying buildpack/lifecycle's own
+      // detailed output (pip/npm/cython/etc. build steps under --verbose) —
+      // verbose and noisy, so they stay in the Full Log modal only. func's own
+      // short status lines ("Still building", "Building function image", ...)
+      // have no such prefix, so they still show here — same as before --verbose.
+      if (!/^\s*\|/.test(data)) appendLog('muted', data);
+      break;
     case 'url':
       currentLiveUrl = data;
       document.getElementById('result-url-text').textContent = data;
@@ -126,20 +132,62 @@ function resetDeployUI() {
 // ═══════════════════════════════════════════════════════════════
 // LOG HELPERS
 // ═══════════════════════════════════════════════════════════════
+// A verbose build (--verbose buildpack output) can emit hundreds of SSE
+// "log" events within a few milliseconds. Writing to the DOM synchronously
+// on every single one (one <p> + a scrollTop reflow, or worse a growing
+// pre.textContent +=) blocks the main thread long enough to freeze the tab.
+// Instead, queue incoming lines and flush them in one batched DOM update per
+// animation frame — no matter how big the burst, the browser stays responsive.
+let pendingCleanLines = [];
+let pendingFullLines = [];
+let logFlushScheduled = false;
+
+function scheduleLogFlush() {
+  if (logFlushScheduled) return;
+  logFlushScheduled = true;
+  requestAnimationFrame(flushLogQueues);
+}
+
+function flushLogQueues() {
+  logFlushScheduled = false;
+
+  if (pendingCleanLines.length) {
+    const content = document.getElementById('log-content');
+    const placeholder = document.getElementById('log-placeholder');
+    if (placeholder) placeholder.remove();
+    const frag = document.createDocumentFragment();
+    for (const { type, text } of pendingCleanLines) {
+      const line = document.createElement('p');
+      line.className = `log-line ${type}`;
+      line.textContent = text;
+      frag.appendChild(line);
+    }
+    logLineCount += pendingCleanLines.length;
+    pendingCleanLines.length = 0;
+    content.appendChild(frag);
+    content.scrollTop = content.scrollHeight;
+    document.getElementById('log-line-count').textContent = `${logLineCount} lines`;
+  }
+
+  if (pendingFullLines.length) {
+    const overlay = document.getElementById('full-log-modal-overlay');
+    if (overlay && overlay.classList.contains('active')) {
+      const pre = document.getElementById('full-log-content');
+      pre.insertAdjacentText('beforeend', (pre.textContent ? '\n' : '') + pendingFullLines.join('\n'));
+      pre.scrollTop = pre.scrollHeight;
+    }
+    pendingFullLines.length = 0;
+  }
+}
+
 function appendLog(type, text) {
-  const content = document.getElementById('log-content');
-  const placeholder = document.getElementById('log-placeholder');
-  if (placeholder) placeholder.remove();
-  const line = document.createElement('p');
-  line.className = `log-line ${type}`;
-  line.textContent = text;
-  content.appendChild(line);
-  content.scrollTop = content.scrollHeight;
-  logLineCount++;
-  document.getElementById('log-line-count').textContent = `${logLineCount} lines`;
+  pendingCleanLines.push({ type, text });
+  scheduleLogFlush();
 }
 
 function clearLogs() {
+  pendingCleanLines.length = 0;
+  pendingFullLines.length = 0;
   document.getElementById('log-content').innerHTML = `
     <div class="log-placeholder" id="log-placeholder">
       <div class="log-placeholder-icon" aria-hidden="true">📡</div>
@@ -158,12 +206,8 @@ function clearLogs() {
 // ═══════════════════════════════════════════════════════════════
 function pushFullLog(line) {
   fullBuildLog.push(line);
-  const overlay = document.getElementById('full-log-modal-overlay');
-  if (overlay && overlay.classList.contains('active')) {
-    const pre = document.getElementById('full-log-content');
-    pre.textContent += (pre.textContent ? '\n' : '') + line;
-    pre.scrollTop = pre.scrollHeight;
-  }
+  pendingFullLines.push(line);
+  scheduleLogFlush();
 }
 
 function openFullLogModal() {
