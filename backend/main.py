@@ -20,7 +20,6 @@ import subprocess
 import json
 import base64
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 # Windows'ta Uvicorn'un subprocess çalıştırmayı engelleyen (NotImplementedError) ayarını eziyoruz
 if sys.platform == "win32":
@@ -142,19 +141,7 @@ async def list_languages():
 
 @app.post("/deploy", summary="Deploy a function (SSE stream)")
 async def deploy_function(req: DeployRequest):
-    """
-    Deploy user code via Knative func CLI. Streams build logs as SSE.
-
-    SSE event types:
-      step      — high-level pipeline phase
-      log       — raw subprocess output line
-      url       — live Knative URL (on success)
-      done      — final JSON summary {status, function_name, url, ...}
-      error     — error message (on failure)
-      exit_code — raw process exit code
-    """
-    
-    # 🚨 Duplicate name check
+    # Duplicate name check
     if not req.is_update:
         existing_funcs = list_ksvc(TENANT_NAMESPACE)
         if any(f.get("name") == req.name for f in existing_funcs):

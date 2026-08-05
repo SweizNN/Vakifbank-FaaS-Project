@@ -14,10 +14,6 @@ from config import TENANT_NAMESPACE, logger
 
 
 def kubectl(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
-    """
-    Run a kubectl command and return the CompletedProcess result.
-    Raises subprocess.TimeoutExpired if the command exceeds `timeout` seconds.
-    """
     cmd = ["kubectl", *args]
     logger.debug("kubectl: %s", " ".join(cmd))
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
@@ -45,10 +41,6 @@ def get_ksvc_ready(name: str) -> bool:
 
 
 def list_ksvc(namespace: str = TENANT_NAMESPACE) -> list[dict]:
-    """
-    Return a list of Knative Service summary dicts from `namespace`.
-    Returns an empty list if the namespace is empty or kubectl fails.
-    """
     result = kubectl("get", "ksvc", "-n", namespace, "-o", "json", timeout=20)
     if result.returncode != 0:
         return []
@@ -85,11 +77,6 @@ def list_ksvc(namespace: str = TENANT_NAMESPACE) -> list[dict]:
 
 
 def get_revisions(name: str, namespace: str = TENANT_NAMESPACE) -> list[dict]:
-    """
-    Return a list of Knative Revisions for a given Service, newest first.
-    Each dict contains the revision name, creation time, whether it is currently
-    receiving 100% traffic, and any faas.vakifbank.com annotations saved during deploy.
-    """
     # Fetch traffic config from the ksvc so we know the current active revision
     ksvc_result = kubectl("get", "ksvc", name, "-n", namespace, "-o", "json", timeout=15)
     current_traffic_revision = ""
@@ -125,25 +112,21 @@ def get_revisions(name: str, namespace: str = TENANT_NAMESPACE) -> list[dict]:
         meta = item.get("metadata", {})
         annotations = meta.get("annotations", {})
         rev_name = meta.get("name", "")
+        # Note: the actual code/config payload is intentionally NOT included
+        # here — it's fetched on demand via GET /functions/{name}/revision/
+        # {revision_name}/code (see main.py) when the user clicks "Load Code",
+        # so the revision list stays lightweight even with many revisions.
         revisions.append({
             "name": rev_name,
             "created_at": meta.get("creationTimestamp", ""),
             "is_active": rev_name == current_traffic_revision,
             "has_code": bool(annotations.get("faas.vakifbank.com/snippet-b64") or
                              annotations.get("faas.vakifbank.com/code-b64")),
-            "language": annotations.get("faas.vakifbank.com/lang", ""),
-            "snippet_b64": annotations.get("faas.vakifbank.com/snippet-b64", ""),
-            "code_b64": annotations.get("faas.vakifbank.com/code-b64", ""),
-            "yaml_b64": annotations.get("faas.vakifbank.com/yaml-b64", ""),
         })
     return revisions
 
 
 def rollback_to_revision(service_name: str, revision_name: str, namespace: str = TENANT_NAMESPACE) -> tuple[bool, str]:
-    """
-    Point 100% of traffic for `service_name` to `revision_name`.
-    Returns (success: bool, message: str).
-    """
     patch = json.dumps({
         "spec": {
             "traffic": [

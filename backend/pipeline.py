@@ -16,7 +16,6 @@ import json
 import os
 import shutil
 import time
-import uuid
 import subprocess
 import threading
 import queue
@@ -54,11 +53,6 @@ async def stream_subprocess(
     cwd: str,
     env: dict | None = None,
 ) -> AsyncGenerator[str, None]:
-    """
-    Run a subprocess asynchronously and yield its merged stdout+stderr
-    as SSE `log` events, followed by a final `exit_code` event.
-    (Windows-safe threaded implementation bypassing asyncio NotImplementedError)
-    """
     merged_env = {**os.environ, **(env or {})}
 
     process = subprocess.Popen(
@@ -106,10 +100,6 @@ async def deploy_pipeline(
     req: DeployRequest,
     work_dir: Path,
 ) -> AsyncGenerator[str, None]:
-    """
-    Full deploy workflow as an async SSE generator.
-    Callers iterate over the yielded strings and forward them to the HTTP response.
-    """
     lang_cfg = LANGUAGE_CONFIG[req.language]
     fn_dir = work_dir / req.name
 
@@ -144,8 +134,7 @@ async def deploy_pipeline(
         entrypoint.parent.mkdir(parents=True, exist_ok=True)
         entrypoint.write_text(req.code, encoding="utf-8")
         yield sse_event("log", f"   → Wrote {len(req.code)} bytes to {entrypoint.name}")
-        
-        import shutil
+
         # Cleanup conflicting auto-generated files to prevent signature/test errors
         if req.language == "go":
             for f in ["handle.go", "handle_test.go", "function_test.go"]:
@@ -156,11 +145,8 @@ async def deploy_pipeline(
                 shutil.rmtree(fn_dir / "src" / "test")
 
         # ── Step 2.5: Apply YAML config & save source state ──────────────────
-        # NOTE: func CLI v1.23.0 no longer allows custom top-level fields (like
-        # 'annotations') in func.yaml — it fails validation with "unknown field".
-        # We therefore store our state in a sidecar .faas-meta.json file which
-        # the func CLI ignores completely, and only touch func.yaml for envs/options.
         yield sse_event("step", "⚙️  Step 2.5/4 — Applying Configuration & Saving State")
+        user_cfg: dict = {}
         try:
             import json as _json
             import base64
@@ -177,11 +163,22 @@ async def deploy_pipeline(
             meta_path.write_text(_json.dumps(meta, indent=2), encoding="utf-8")
             yield sse_event("log", "   → Saved function state to .faas-meta.json")
 
-            # ── Apply user envs/options ─────────────────────────────────────────
-            # In func CLI v1.23+, envs shouldn't be appended to func.yaml root.
-            # We will pass them as --env arguments to 'func deploy' in Step 3.
+            # ── Parse user config (envs applied via deploy args in Step 3) ──────
             if req.config_yaml:
+                try:
+                    import yaml as _yaml
+                    user_cfg = _yaml.safe_load(req.config_yaml) or {}
+                except Exception:
+                    user_cfg = {}
                 yield sse_event("log", "   → Parsed YAML configuration (will apply via deploy args)")
+
+            # ── Write user-requested libraries into the language's manifest ────
+            deps = user_cfg.get("dependencies") if isinstance(user_cfg, dict) else None
+            if deps:
+                from dependencies import apply_dependencies
+                applied = apply_dependencies(fn_dir, req.language, deps)
+                if applied:
+                    yield sse_event("log", f"   → Added {len(applied)} librar{'y' if len(applied) == 1 else 'ies'} to manifest: {', '.join(applied)}")
         except Exception as e:
             yield sse_event("error", f"❌ Failed to save state or apply config: {str(e)}")
             yield sse_event("done", json.dumps({"status": "error", "job_id": job_id}))
@@ -200,16 +197,10 @@ async def deploy_pipeline(
             "--image", fn_image,
         ]
 
-        if req.config_yaml:
-            try:
-                import yaml as _yaml
-                user_cfg = _yaml.safe_load(req.config_yaml) or {}
-                if "envs" in user_cfg:
-                    for e in user_cfg["envs"]:
-                        val = e.get("value", "")
-                        deploy_cmd.extend(["--env", f"{e['name']}={val}"])
-            except Exception:
-                pass
+        if isinstance(user_cfg, dict) and user_cfg.get("envs"):
+            for e in user_cfg["envs"]:
+                val = e.get("value", "")
+                deploy_cmd.extend(["--env", f"{e['name']}={val}"])
 
         last_exit = 0
         async for frame in stream_subprocess(deploy_cmd, cwd=str(fn_dir)):

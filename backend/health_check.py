@@ -14,7 +14,7 @@ import subprocess
 import shutil
 import sys
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from typing import Optional
 
 

@@ -1,4 +1,3 @@
-import pytest
 from pipeline import sse_event
 
 def test_sse_event_formatting():

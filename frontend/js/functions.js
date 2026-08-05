@@ -132,6 +132,9 @@ async function openEditModal(name) {
         <details id="edit-yaml-details" style="margin-bottom:12px;">
           <summary style="cursor:pointer; font-size:12px; color:var(--text-secondary); font-weight:500;">⚙️ Advanced Configuration (YAML)</summary>
           <div style="margin-top:8px;">
+            <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openLibraryModal('edit')">📦 Add Libraries</button>
+            </div>
             <textarea id="edit-yaml-textarea" style="width:100%; height:100px; font-family:var(--font-mono); font-size:12px; padding:8px; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border); border-radius:var(--radius-sm); resize:vertical;"></textarea>
           </div>
         </details>
