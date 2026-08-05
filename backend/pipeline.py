@@ -195,6 +195,10 @@ async def deploy_pipeline(
             "--namespace", TENANT_NAMESPACE,
             "--builder", "pack",
             "--image", fn_image,
+            "--verbose",  # surface the underlying pack/buildpack lifecycle output
+                          # instead of func's generic "Still building..." filler —
+                          # without this, a lifecycle failure (e.g. pip install
+                          # error) only ever shows as "exit status: 51" with no detail.
         ]
 
         if isinstance(user_cfg, dict) and user_cfg.get("envs"):
