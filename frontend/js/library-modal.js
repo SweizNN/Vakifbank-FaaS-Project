@@ -60,12 +60,18 @@ function setDependenciesInYaml(yamlText, depsList) {
 function openLibraryModal(target) {
   libraryModalTarget = target;
   const lang = libraryModalLanguage();
+  const hint = LIBRARY_HINTS[lang] || 'e.g. package-name';
   document.getElementById('library-modal-lang-badge').textContent = lang;
-  document.getElementById('library-modal-hint').textContent = LIBRARY_HINTS[lang] || 'e.g. package-name';
+  document.getElementById('library-modal-hint').textContent = hint;
 
   const textareaEl = document.getElementById(libraryModalTextareaId());
   const existing = parseDependenciesFromYaml(textareaEl ? textareaEl.value : '');
-  document.getElementById('library-modal-textarea').value = existing.join('\n');
+  const modalTextarea = document.getElementById('library-modal-textarea');
+  modalTextarea.value = existing.join('\n');
+  // Keep the in-box placeholder in sync with the hint below it — both must
+  // show the same language's example, otherwise a stale placeholder (e.g.
+  // Python's) sticks around when the box is reopened for a different language.
+  modalTextarea.placeholder = hint;
 
   document.getElementById('library-modal-overlay').classList.add('active');
 }
