@@ -61,8 +61,10 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
 
 function handleSSEEvent(event, data, fnName) {
   switch (event) {
-    case 'step': appendLog('step', data); updateStages(data); break;
-    case 'log': appendLog('muted', data); break;
+    case 'step': appendLog('step', data); pushFullLog(data); updateStages(data); break;
+    // Raw build/lifecycle output (can be very verbose — e.g. --verbose buildpack
+    // logs) only goes into the Full Log modal, keeping the main panel readable.
+    case 'log': pushFullLog(data); break;
     case 'url':
       currentLiveUrl = data;
       document.getElementById('result-url-text').textContent = data;
@@ -70,6 +72,7 @@ function handleSSEEvent(event, data, fnName) {
       break;
     case 'error':
       appendLog('error', data);
+      pushFullLog(data);
       setLogStatus('error', 'Failed');
       setDeployLoading(false);
       showToast(`Deployment failed: ${data}`, 'error');
@@ -78,7 +81,9 @@ function handleSSEEvent(event, data, fnName) {
       try {
         const payload = JSON.parse(data);
         if (payload.status === 'success') {
-          appendLog('success', `✅ ${fnName} is live at: ${payload.url}`);
+          const successLine = `✅ ${fnName} is live at: ${payload.url}`;
+          appendLog('success', successLine);
+          pushFullLog(successLine);
           setLogStatus('success', 'Complete');
           showToast(`✅ ${fnName} deployed successfully!`, 'success');
           setStage('ready', 'done');
@@ -90,7 +95,7 @@ function handleSSEEvent(event, data, fnName) {
       setDeployLoading(false);
       break;
     case 'exit_code': break;
-    default: appendLog('muted', data);
+    default: appendLog('muted', data); pushFullLog(data);
   }
 }
 
@@ -143,6 +148,45 @@ function clearLogs() {
   logLineCount = 0;
   document.getElementById('log-line-count').textContent = '0 lines';
   setLogStatus('', 'Idle');
+  fullBuildLog = [];
+  const fullLogEl = document.getElementById('full-log-content');
+  if (fullLogEl) fullLogEl.textContent = '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FULL LOG MODAL
+// ═══════════════════════════════════════════════════════════════
+function pushFullLog(line) {
+  fullBuildLog.push(line);
+  const overlay = document.getElementById('full-log-modal-overlay');
+  if (overlay && overlay.classList.contains('active')) {
+    const pre = document.getElementById('full-log-content');
+    pre.textContent += (pre.textContent ? '\n' : '') + line;
+    pre.scrollTop = pre.scrollHeight;
+  }
+}
+
+function openFullLogModal() {
+  const pre = document.getElementById('full-log-content');
+  pre.textContent = fullBuildLog.length
+    ? fullBuildLog.join('\n')
+    : 'No logs yet — deploy a function to see build output here.';
+  document.getElementById('full-log-modal-overlay').classList.add('active');
+  pre.scrollTop = pre.scrollHeight;
+}
+
+function closeFullLogModal() {
+  document.getElementById('full-log-modal-overlay').classList.remove('active');
+}
+
+async function copyFullLog() {
+  if (!fullBuildLog.length) { showToast('No logs to copy.', 'warn'); return; }
+  try {
+    await navigator.clipboard.writeText(fullBuildLog.join('\n'));
+    showToast('📋 Full log copied to clipboard!', 'success');
+  } catch {
+    showToast('Failed to copy logs.', 'error');
+  }
 }
 
 function setLogStatus(type, label) {

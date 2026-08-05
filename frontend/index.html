@@ -194,7 +194,10 @@
             <div class="card-icon" aria-hidden="true">📟</div>
             Build Output
           </div>
-          <button class="btn btn-ghost btn-sm" onclick="clearLogs()" aria-label="Clear log output">Clear</button>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="openFullLogModal()" aria-label="View full build log">🔍 Full Log</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearLogs()" aria-label="Clear log output">Clear</button>
+          </div>
         </div>
 
         <div class="log-panel" role="log" aria-live="polite" aria-relevant="additions">
@@ -295,6 +298,25 @@
             <button class="btn btn-primary" style="width: auto; padding: 0 24px;" onclick="runFunctionTest()">Send Request</button>
           </div>
           <div class="modal-result" id="test-modal-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
+         FULL BUILD LOG MODAL
+    ═══════════════════════════════════════════ -->
+    <div class="modal-overlay" id="full-log-modal-overlay">
+      <div class="modal log-modal">
+        <div class="modal-header">
+          <div><span aria-hidden="true">📄</span> Full Build Log</div>
+          <div class="modal-close" onclick="closeFullLogModal()">×</div>
+        </div>
+        <div class="modal-body">
+          <pre class="full-log-pre" id="full-log-content"></pre>
+          <div class="modal-footer" style="margin-top:12px;">
+            <button class="btn btn-ghost" onclick="copyFullLog()">📋 Copy</button>
+            <button class="btn btn-primary" style="width:auto; padding:0 24px;" onclick="closeFullLogModal()">Close</button>
+          </div>
         </div>
       </div>
     </div>
