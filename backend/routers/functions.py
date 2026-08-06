@@ -36,7 +36,8 @@ async def get_functions():
 
 @router.get("/functions/{name}/code", summary="Get function code and config")
 async def get_function_code(name: str):
-    """Retrieve base64 encoded source code and config from ksvc annotations."""
+    """Retrieve base64 encoded source code and config from ksvc annotations.
+    For SQL-to-API functions, returns the original SQL query and db_type."""
     try:
         result = kubectl("get", "ksvc", name, "-n", TENANT_NAMESPACE, "-o", "json")
 
@@ -46,20 +47,33 @@ async def get_function_code(name: str):
         ksvc = json.loads(result.stdout)
         annotations = ksvc.get("metadata", {}).get("annotations", {})
 
+        fn_type = annotations.get("faas.vakifbank.com/fn-type", "")
+        lang = annotations.get("faas.vakifbank.com/lang", "")
+
+        # ── SQL-to-API functions: return the original SQL query ───────────
+        if fn_type == "sql-to-api":
+            sql_b64 = annotations.get("faas.vakifbank.com/sql-b64", "")
+            db_type = annotations.get("faas.vakifbank.com/db-type", "")
+            sql_query = base64.b64decode(sql_b64).decode("utf-8") if sql_b64 else ""
+            return {
+                "name": name,
+                "language": lang,          # e.g. "sql-postgres"
+                "fn_type": "sql-to-api",
+                "db_type": db_type,
+                "code": sql_query,          # the original SELECT query
+                "config_yaml": "",
+            }
+
+        # ── Regular code-editor functions ──────────────────────────────
         # snippet-b64 = raw editor content (user-written only, preferred)
         # code-b64    = full entrypoint file (fallback for older deploys)
         snippet_b64 = annotations.get("faas.vakifbank.com/snippet-b64", "")
         code_b64 = annotations.get("faas.vakifbank.com/code-b64", "")
-        lang = annotations.get("faas.vakifbank.com/lang", "")
         yaml_b64 = annotations.get("faas.vakifbank.com/yaml-b64", "")
 
         display_b64 = snippet_b64 or code_b64   # prefer snippet, fall back to full code
 
         if not display_b64:
-            # This function was deployed before the Edit feature existed —
-            # or (for SQL-to-API functions) code-editor annotations were never
-            # written in the first place; "delete and re-deploy" is correct
-            # advice either way, since v1 has no SQL-to-API update path.
             raise HTTPException(
                 status_code=422,
                 detail=f"Function '{name}' was deployed before the Edit feature was added. Please delete and re-deploy it to enable editing."
@@ -71,6 +85,7 @@ async def get_function_code(name: str):
         return {
             "name": name,
             "language": lang,
+            "fn_type": "code-editor",
             "code": code,
             "config_yaml": config_yaml
         }
@@ -107,7 +122,8 @@ async def rollback_function(name: str, body: dict):
 
 @router.get("/functions/{name}/revision/{revision_name}/code", summary="Get code saved in a specific revision")
 async def get_revision_code(name: str, revision_name: str):
-    """Retrieve source code and config from a specific Knative Revision's annotations."""
+    """Retrieve source code and config from a specific Knative Revision's annotations.
+    For SQL-to-API revisions, returns the original SQL query and db_type."""
     try:
         result = kubectl("get", "revision", revision_name, "-n", TENANT_NAMESPACE, "-o", "json", timeout=15)
         if result.returncode != 0:
@@ -115,9 +131,28 @@ async def get_revision_code(name: str, revision_name: str):
 
         rev = json.loads(result.stdout)
         annotations = rev.get("metadata", {}).get("annotations", {})
+
+        fn_type = annotations.get("faas.vakifbank.com/fn-type", "")
+        lang = annotations.get("faas.vakifbank.com/lang", "")
+
+        # ── SQL-to-API revisions: return the original SQL query ───────────
+        if fn_type == "sql-to-api":
+            sql_b64 = annotations.get("faas.vakifbank.com/sql-b64", "")
+            db_type = annotations.get("faas.vakifbank.com/db-type", "")
+            sql_query = base64.b64decode(sql_b64).decode("utf-8") if sql_b64 else ""
+            return {
+                "name": name,
+                "revision_name": revision_name,
+                "language": lang,
+                "fn_type": "sql-to-api",
+                "db_type": db_type,
+                "code": sql_query,
+                "config_yaml": "",
+            }
+
+        # ── Regular code-editor revisions ──────────────────────────────
         snippet_b64 = annotations.get("faas.vakifbank.com/snippet-b64", "")
         code_b64 = annotations.get("faas.vakifbank.com/code-b64", "")
-        lang = annotations.get("faas.vakifbank.com/lang", "")
         yaml_b64 = annotations.get("faas.vakifbank.com/yaml-b64", "")
 
         display_b64 = snippet_b64 or code_b64
@@ -126,7 +161,14 @@ async def get_revision_code(name: str, revision_name: str):
 
         code = base64.b64decode(display_b64).decode("utf-8")
         config_yaml = base64.b64decode(yaml_b64).decode("utf-8") if yaml_b64 else ""
-        return {"name": name, "revision_name": revision_name, "language": lang, "code": code, "config_yaml": config_yaml}
+        return {
+            "name": name,
+            "revision_name": revision_name,
+            "language": lang,
+            "fn_type": "code-editor",
+            "code": code,
+            "config_yaml": config_yaml,
+        }
     except HTTPException:
         raise
     except Exception as e:

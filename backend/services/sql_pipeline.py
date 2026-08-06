@@ -20,6 +20,7 @@ these functions (its existing "delete and re-deploy" guidance happens to be
 exactly the right advice here too).
 """
 
+import base64
 import json
 import shutil
 from pathlib import Path
@@ -29,6 +30,7 @@ from config import DEPLOY_TIMEOUT, REGISTRY_PREFIX, TENANT_NAMESPACE, logger
 from generators.sql_to_python import generate_function_code, get_dependencies
 from models import SqlDeployRequest
 from services.dependencies import apply_dependencies
+from services.k8s import annotate_ksvc, annotate_revision, get_latest_revision_name
 from services.pipeline import deploy_jobs, step_func_deploy, step_poll_ready, step_scaffold
 from services.secret_provisioning import generate_api_key, provision_db_secret_and_envs
 from services.sql_validator import SqlValidationError, validate_select_only
@@ -96,6 +98,39 @@ async def run_sql_api_deploy(job_id: str, req: SqlDeployRequest, work_dir: Path)
             yield sse_event("done", json.dumps({"status": "error", "job_id": job_id}))
             return
         url = poll_result["url"]
+
+        # ── Persist SQL metadata as ksvc/revision annotations ──────────────
+        # This enables the Edit button and Revision History panel in the UI.
+        # We store the *original SQL query* (not the generated Python), so the
+        # user sees their own query — not generated boilerplate — when they
+        # open the details panel. The fn-type annotation lets the /code endpoint
+        # serve a SQL-specific response instead of the generic "no code" 422.
+        try:
+            sql_annotations = {
+                "faas.vakifbank.com/fn-type": "sql-to-api",
+                "faas.vakifbank.com/db-type": req.db_type,
+                "faas.vakifbank.com/sql-b64": base64.b64encode(
+                    req.sql_query.encode("utf-8")
+                ).decode("utf-8"),
+                # snippet-b64 / lang are read by the generic /code endpoint;
+                # set them so it can return something meaningful.
+                "faas.vakifbank.com/snippet-b64": base64.b64encode(
+                    req.sql_query.encode("utf-8")
+                ).decode("utf-8"),
+                "faas.vakifbank.com/lang": f"sql-{req.db_type}",
+            }
+            ann_result = annotate_ksvc(req.name, sql_annotations, namespace=TENANT_NAMESPACE)
+            if ann_result.returncode == 0:
+                yield sse_event("log", "   → SQL metadata saved to ksvc annotations (Edit/History enabled)")
+            else:
+                yield sse_event("log", f"   ⚠️  Could not save SQL metadata: {ann_result.stderr.strip()[:120]}")
+
+            latest_revision = get_latest_revision_name(req.name, namespace=TENANT_NAMESPACE)
+            if latest_revision:
+                annotate_revision(latest_revision, sql_annotations, namespace=TENANT_NAMESPACE)
+                yield sse_event("log", f"   → SQL metadata saved to revision '{latest_revision}'")
+        except Exception as ann_exc:
+            yield sse_event("log", f"   ⚠️  Annotation step skipped: {ann_exc}")
 
         # ── Success ────────────────────────────────────────────────────────
         # api_key deliberately never goes into deploy_jobs — GET /jobs/{id} is
