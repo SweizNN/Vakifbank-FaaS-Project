@@ -31,4 +31,13 @@ async Task Invoke(HttpContext context)
 app.MapGet("/", Invoke);
 app.MapPost("/", Invoke);
 
+// `func`'s generated Knative Service always wires kubelet's liveness probe
+// and the queue-proxy sidecar's readiness probe to these two paths on 8080
+// (every func-native language template implements them via func's own
+// runtime wrapper — invisible to the user's Handle() code). Since the
+// dotnet build path skips that wrapper entirely, this Program.cs has to
+// answer them itself or the pod never becomes Ready.
+app.MapGet("/health/liveness", () => Results.Ok());
+app.MapGet("/health/readiness", () => Results.Ok());
+
 app.Run();
