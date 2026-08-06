@@ -11,6 +11,7 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
   if (!name || !language || !code) { showToast('Please fill in all fields and provide your function code.', 'error'); return; }
   if (!/^[a-z][a-z0-9-]{2,49}$/.test(name)) { showToast('Function name must start with a lowercase letter and contain only letters, digits, and hyphens.', 'error'); return; }
 
+  currentDeployMode = 'code';
   resetDeployUI();
   setDeployLoading(true);
   clearLogs();
@@ -59,6 +60,14 @@ document.getElementById('deploy-form').addEventListener('submit', async (e) => {
   }
 });
 
+// Shared by both the code-editor form (deploy.js) and the SQL-to-API form
+// (sql-deploy.js) — currentDeployMode says which one is currently streaming,
+// since the two flows have separate buttons and result cards.
+function setCurrentDeployLoading(loading) {
+  if (currentDeployMode === 'sql') setSqlDeployLoading(loading);
+  else setDeployLoading(loading);
+}
+
 function handleSSEEvent(event, data, fnName) {
   switch (event) {
     case 'step': appendLog('step', data); pushFullLog(data); updateStages(data); break;
@@ -73,14 +82,19 @@ function handleSSEEvent(event, data, fnName) {
       break;
     case 'url':
       currentLiveUrl = data;
-      document.getElementById('result-url-text').textContent = data;
-      document.getElementById('result-card').classList.add('visible');
+      if (currentDeployMode === 'sql') {
+        document.getElementById('sql-result-url-text').textContent = data;
+        document.getElementById('sql-result-card').classList.add('visible');
+      } else {
+        document.getElementById('result-url-text').textContent = data;
+        document.getElementById('result-card').classList.add('visible');
+      }
       break;
     case 'error':
       appendLog('error', data);
       pushFullLog(data);
       setLogStatus('error', 'Failed');
-      setDeployLoading(false);
+      setCurrentDeployLoading(false);
       showToast(`Deployment failed: ${data}`, 'error');
       break;
     case 'done':
@@ -93,12 +107,15 @@ function handleSSEEvent(event, data, fnName) {
           setLogStatus('success', 'Complete');
           showToast(`✅ ${fnName} deployed successfully!`, 'success');
           setStage('ready', 'done');
+          if (payload.api_key) {
+            document.getElementById('sql-result-api-key-text').textContent = payload.api_key;
+          }
           loadFunctions();
         } else {
           setLogStatus('error', 'Failed');
         }
       } catch { /* ignore parse error */ }
-      setDeployLoading(false);
+      setCurrentDeployLoading(false);
       break;
     case 'exit_code': break;
     default: appendLog('muted', data); pushFullLog(data);

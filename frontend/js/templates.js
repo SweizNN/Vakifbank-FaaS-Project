@@ -89,10 +89,14 @@ public class Function {
 
 function wrapCode(lang, userCode) {
   if (lang === 'python') {
-    const indented = userCode.split('\n').map(l => l ? '    ' + l : '').join('\n');
+    // NOTE: keep this ASGI wrapper in sync with the Python copy in
+    // backend/generators/sql_to_python.py — the SQL-to-API feature generates
+    // its own func.py directly (it never goes through this JS function) but
+    // relies on the exact same wrapper contract (header/status-tuple support).
     return `import json
 import uuid
 import platform
+import inspect
 from datetime import datetime
 
 # --- USER CODE START ---
@@ -101,9 +105,15 @@ ${userCode}
 
 def new(): return Function()
 
+# Old single-arg handlers (def handler(req_data):) keep working exactly as
+# before; a handler that also wants request headers can opt in with
+# def handler(req_data, headers): — computed once at cold start.
+_handler_wants_headers = len(inspect.signature(handler).parameters) >= 2
+
 class Function:
     def __init__(self): pass
     async def handle(self, scope, receive, send):
+        headers = {k.decode('latin-1').lower(): v.decode('latin-1') for k, v in scope.get('headers', [])}
         body_bytes = b""
         while True:
             message = await receive()
@@ -114,8 +124,13 @@ class Function:
         except: req_data = {}
 
         try:
-            response_data = handler(req_data)
+            response_data = handler(req_data, headers) if _handler_wants_headers else handler(req_data)
             status_code = 200
+            # Opt-in: return (body, status_code) instead of just body to
+            # control the HTTP status explicitly (e.g. 401 on a bad API key)
+            # without raising — raising always maps to 500.
+            if isinstance(response_data, tuple) and len(response_data) == 2:
+                response_data, status_code = response_data
         except Exception as e:
             response_data = {"error": str(e)}
             status_code = 500

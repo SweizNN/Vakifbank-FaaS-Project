@@ -62,7 +62,10 @@ jobs:
         working-directory: backend
         run: |
           # E9,F63,F7,F82 = critical errors (syntax, import errors, undefined names)
-          flake8 main.py health_check.py \
+          # Lints the whole backend/ tree (routers/, services/, generators/
+          # included) — not just main.py — so new modules are never silently
+          # unchecked.
+          flake8 . \
             --count \
             --select=E9,F63,F7,F82 \
             --show-source \

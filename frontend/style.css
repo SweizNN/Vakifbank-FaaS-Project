@@ -924,6 +924,38 @@ select option {
   border-bottom-color: var(--accent-blue);
 }
 
+/* ── Page-level tabs (Code Editor / SQL to API) — same pattern as the edit
+   modal's internal tabs above, promoted to page level ── */
+.page-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--border-hairline);
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.page-tab {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+  margin-bottom: -2px;
+}
+
+.page-tab:hover {
+  color: var(--text-primary);
+}
+
+.page-tab.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+}
+
 /* Language badge inside edit modal */
 .edit-lang-badge {
   display: inline-block;

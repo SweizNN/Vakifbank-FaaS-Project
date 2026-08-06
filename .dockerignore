@@ -1,0 +1,28 @@
+# Build context is the repo root (see .github/workflows/deploy.yml:
+# `context: .`, `file: ./backend/Dockerfile`) — patterns here apply to the
+# whole repo, not just backend/. Docker only reads .dockerignore from the
+# root of the build context, so this can't live inside backend/.
+
+# ── Python build/cache artifacts — never needed in the image ──────────────────
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.coverage
+**/htmlcov/
+
+# Tests aren't needed at runtime — CI already runs them before the image build
+backend/tests/
+
+# ── Git / CI / docs — not needed inside the image ──────────────────────────────
+.git/
+.github/
+*.md
+
+# ── Editor/OS cruft ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── k8s manifests — applied via kubectl from the runner, not baked into the image
+k8s/

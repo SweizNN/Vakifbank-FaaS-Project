@@ -1,4 +1,4 @@
-from pipeline import sse_event
+from services.sse import sse_event
 
 def test_sse_event_formatting():
     event = sse_event("step", "Starting deploy")

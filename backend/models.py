@@ -6,11 +6,24 @@ validation logic and making models independently importable for tests.
 """
 
 import re
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 from config import SUPPORTED_LANGUAGES
+
+_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,49}$")
+
+
+def validate_function_name(v: str) -> str:
+    """Shared by every model that carries a function name (`DeployRequest`,
+    `SqlDeployRequest`, and the ad-hoc regex checks routers run on path params)."""
+    if not _NAME_RE.match(v):
+        raise ValueError(
+            "Function name must start with a lowercase letter and "
+            "contain only lowercase letters, digits, and hyphens."
+        )
+    return v
 
 
 class DeployRequest(BaseModel):
@@ -24,12 +37,7 @@ class DeployRequest(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
-        if not re.match(r"^[a-z][a-z0-9-]{2,49}$", v):
-            raise ValueError(
-                "Function name must start with a lowercase letter and "
-                "contain only lowercase letters, digits, and hyphens."
-            )
-        return v
+        return validate_function_name(v)
 
     @field_validator("language")
     @classmethod
@@ -40,6 +48,22 @@ class DeployRequest(BaseModel):
                 f"Unsupported language '{v}'. Choose from: {SUPPORTED_LANGUAGES}"
             )
         return v
+
+
+class SqlDeployRequest(BaseModel):
+    name: str = Field(..., min_length=3, max_length=50)
+    db_type: Literal["postgres", "mysql"]
+    db_host: str = Field(..., min_length=1, max_length=255)
+    db_port: int = Field(..., ge=1, le=65535)
+    db_name: str = Field(..., min_length=1, max_length=128)
+    db_user: str = Field(..., min_length=1, max_length=128)
+    db_password: str = Field(..., min_length=1, max_length=512)
+    sql_query: str = Field(..., min_length=1, max_length=20000)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        return validate_function_name(v)
 
 
 class DeleteResponse(BaseModel):

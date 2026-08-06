@@ -126,6 +126,69 @@ def get_revisions(name: str, namespace: str = TENANT_NAMESPACE) -> list[dict]:
     return revisions
 
 
+def service_exists(name: str, namespace: str = TENANT_NAMESPACE) -> bool:
+    """True if a Knative Service with this name already exists (used by both
+    the code-editor and SQL-to-API deploy flows for the duplicate-name check)."""
+    return any(f.get("name") == name for f in list_ksvc(namespace))
+
+
+def apply_secret(
+    name: str,
+    string_data: dict[str, str],
+    namespace: str = TENANT_NAMESPACE,
+    labels: dict[str, str] | None = None,
+    timeout: int = 30,
+) -> subprocess.CompletedProcess:
+    """
+    Create/update an Opaque Secret via `kubectl apply -f -`, piping a JSON
+    manifest over stdin. Deliberately NOT built on `kubectl(*args)` with
+    `--from-literal=KEY=value` — that would put the credential in the
+    orchestrator process's own argv, visible to anything that can read
+    `/proc/<pid>/cmdline` or run `ps` inside the pod. Idempotent, mirroring the
+    `kubectl create secret ... --dry-run=client -o yaml | kubectl apply -f -`
+    idiom already used for docker-hub-creds in .github/workflows/deploy.yml.
+    """
+    manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "type": "Opaque",
+        "metadata": {"name": name, "namespace": namespace, "labels": labels or {}},
+        "stringData": string_data,
+    }
+    logger.debug("kubectl apply -f - (Secret/%s, keys=%s)", name, list(string_data.keys()))
+    return subprocess.run(
+        ["kubectl", "apply", "-f", "-"],
+        input=json.dumps(manifest),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )  # never log `manifest` itself — it contains credentials
+
+
+def delete_secret(name: str, namespace: str = TENANT_NAMESPACE, timeout: int = 30) -> subprocess.CompletedProcess:
+    return kubectl("delete", "secret", name, "-n", namespace, "--ignore-not-found=true", timeout=timeout)
+
+
+def annotate_ksvc(name: str, annotations: dict[str, str], namespace: str = TENANT_NAMESPACE, timeout: int = 30) -> subprocess.CompletedProcess:
+    pairs = [f"{k}={v}" for k, v in annotations.items()]
+    return kubectl("annotate", "ksvc", name, "-n", namespace, "--overwrite", *pairs, timeout=timeout)
+
+
+def annotate_revision(revision_name: str, annotations: dict[str, str], namespace: str = TENANT_NAMESPACE, timeout: int = 30) -> subprocess.CompletedProcess:
+    pairs = [f"{k}={v}" for k, v in annotations.items()]
+    return kubectl("annotate", "revision", revision_name, "-n", namespace, "--overwrite", *pairs, timeout=timeout)
+
+
+def get_latest_revision_name(service_name: str, namespace: str = TENANT_NAMESPACE, timeout: int = 15) -> Optional[str]:
+    result = kubectl(
+        "get", "ksvc", service_name, "-n", namespace,
+        "-o", "jsonpath={.status.latestCreatedRevisionName}",
+        timeout=timeout,
+    )
+    name = result.stdout.strip()
+    return name if (result.returncode == 0 and name) else None
+
+
 def rollback_to_revision(service_name: str, revision_name: str, namespace: str = TENANT_NAMESPACE) -> tuple[bool, str]:
     patch = json.dumps({
         "spec": {

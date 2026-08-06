@@ -115,6 +115,14 @@
           </div>
         </div>
 
+        <div class="page-tabs" role="tablist" aria-label="Deploy mode">
+          <button type="button" class="page-tab active" id="tab-code-editor" role="tab" aria-selected="true"
+                  onclick="switchDeployTab('code')">⚡ Code Editor</button>
+          <button type="button" class="page-tab" id="tab-sql-api" role="tab" aria-selected="false"
+                  onclick="switchDeployTab('sql')">🗄️ SQL to API</button>
+        </div>
+
+        <div id="deploy-panel-code">
         <form id="deploy-form" novalidate>
           <div class="form-row">
             <div>
@@ -183,6 +191,92 @@
           <div class="result-url">
             <span class="result-url-text" id="result-url-text"></span>
             <button class="copy-btn" onclick="copyUrl()" aria-label="Copy URL to clipboard">Copy</button>
+          </div>
+        </div>
+        </div>
+
+        <!-- ── SQL to API panel ── -->
+        <div id="deploy-panel-sql" style="display:none;">
+          <form id="sql-deploy-form" novalidate>
+            <div class="form-row">
+              <div>
+                <label for="sql-fn-name">Function Name</label>
+                <input type="text" id="sql-fn-name" name="sql-fn-name" placeholder="my-api" autocomplete="off"
+                  spellcheck="false" pattern="[a-z][a-z0-9\-]{2,49}" required aria-describedby="sql-fn-name-hint" />
+                <div id="sql-fn-name-hint" style="font-size:10px; color:var(--text-muted); margin-top:5px;">Lowercase
+                  letters, digits, hyphens. 3–50 chars.</div>
+              </div>
+              <div>
+                <label for="sql-db-type">Database Type</label>
+                <select id="sql-db-type" name="sql-db-type" required aria-label="Select database type"
+                  onchange="updateSqlPortPlaceholder()">
+                  <option value="postgres">🐘 PostgreSQL</option>
+                  <option value="mysql">🐬 MySQL</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div>
+                <label for="sql-db-host">Database Host</label>
+                <input type="text" id="sql-db-host" placeholder="db.internal.example.com" autocomplete="off"
+                  spellcheck="false" required />
+              </div>
+              <div>
+                <label for="sql-db-port">Port</label>
+                <input type="number" id="sql-db-port" placeholder="5432" min="1" max="65535" required />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div>
+                <label for="sql-db-name">Database Name</label>
+                <input type="text" id="sql-db-name" placeholder="my_database" autocomplete="off" spellcheck="false" required />
+              </div>
+              <div>
+                <label for="sql-db-user">Username</label>
+                <input type="text" id="sql-db-user" placeholder="db_user" autocomplete="off" spellcheck="false" required />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="sql-db-password">Password</label>
+              <input type="password" id="sql-db-password" placeholder="••••••••" autocomplete="new-password" required />
+              <div style="font-size:10px; color:var(--text-muted); margin-top:5px;">Stored as a Kubernetes Secret — never
+                shown again after this form.</div>
+            </div>
+
+            <div class="form-group">
+              <label for="sql-query-editor">SQL Query</label>
+              <textarea class="modal-textarea" id="sql-query-editor" style="height:140px;" spellcheck="false"
+                placeholder="SELECT id, name, balance FROM users WHERE active = true" required></textarea>
+              <div style="font-size:10px; color:var(--text-muted); margin-top:5px;">Read-only SELECT only — a single
+                statement, no INSERT/UPDATE/DELETE/DDL.</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="sql-deploy-btn" aria-busy="false">
+              <span id="sql-deploy-btn-icon">⚡</span>
+              <span id="sql-deploy-btn-text">Deploy API</span>
+            </button>
+          </form>
+
+          <!-- Success result — shows the API key exactly once -->
+          <div class="result-card" id="sql-result-card" role="status" aria-live="polite">
+            <div class="result-label">✅ API Live!</div>
+            <div class="result-url">
+              <span class="result-url-text" id="sql-result-url-text"></span>
+              <button class="copy-btn" onclick="copySqlUrl()" aria-label="Copy URL to clipboard">Copy</button>
+            </div>
+            <div style="color:var(--accent-amber); font-size:12px; margin:12px 0 6px;">
+              ⚠️ This API key is shown <strong>once</strong> and cannot be retrieved again. Store it securely now.
+            </div>
+            <div class="result-url">
+              <span class="result-url-text" id="sql-result-api-key-text"></span>
+              <button class="copy-btn" onclick="copySqlApiKey()" aria-label="Copy API key to clipboard">Copy Key</button>
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:10px;">
+              Call it with: <code style="font-family:var(--font-mono);">curl -H "X-API-Key: &lt;key&gt;" &lt;url&gt;</code>
+            </div>
           </div>
         </div>
       </div>
@@ -419,6 +513,7 @@
   <script src="/static/js/theme.js"></script>
   <script src="/static/js/editor.js"></script>
   <script src="/static/js/deploy.js"></script>
+  <script src="/static/js/sql-deploy.js"></script>
   <script src="/static/js/functions.js"></script>
   <script src="/static/js/health.js"></script>
   <script src="/static/js/utils.js"></script>
