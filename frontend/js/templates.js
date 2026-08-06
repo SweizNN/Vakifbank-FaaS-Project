@@ -279,7 +279,9 @@ const TEMPLATE_MARKERS = {
   node:       [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
   go:         [ { from: 0, to: 19 }, { from: 25, to: 31 } ],
   typescript: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
-  dotnet:     [],   // user edits the entire file — no locked boilerplate
+  // Lock: lines 0-13 = using statements + namespace + class + method sig + reader setup + blank line
+  //        lines 28-29 = closing braces of method and class
+  dotnet:     [ { from: 0, to: 13 }, { from: 28, to: 29 } ],
   quarkus:    [ { from: 0, to: 7 }, { from: 11, to: 16 } ],
   rust:       [ { from: 0, to: 0 }, { from: 9, to: 9 } ]
 };

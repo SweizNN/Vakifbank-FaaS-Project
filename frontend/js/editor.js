@@ -91,6 +91,7 @@ function handleFileUpload(event) {
         if (['python', 'quarkus', 'rust'].includes(lang)) spaces = '    ';
         if (['node', 'typescript'].includes(lang)) spaces = '  ';
         if (lang === 'go') spaces = '\t';
+        if (lang === 'dotnet') spaces = '        '; // 8 spaces — inside class + method
 
         const finalContent = content.split('\n').map(l => l ? spaces + l : '').join('\n');
 
