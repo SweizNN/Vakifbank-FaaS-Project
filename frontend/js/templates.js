@@ -85,36 +85,20 @@ public class Function {
         "language": "Rust"
     })
 }`,
-  dotnet: `using System.Text.Json;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
+  dotnet: `string name = "World";
+try {
+    var body = JsonSerializer.Deserialize<JsonElement>(rawBody);
+    if (body.TryGetProperty("name", out var nameProp))
+        name = nameProp.GetString() ?? "World";
+} catch { /* empty or non-JSON body is fine */ }
 
-namespace function;
+logger.LogInformation("Hello handler called with name={Name}", name);
 
-public class Function
-{
-    public static IActionResult Handle(HttpRequest request, ILogger logger)
-    {
-        using var reader = new System.IO.StreamReader(request.Body);
-        var rawBody = reader.ReadToEnd();
-
-        string name = "World";
-        try {
-            var body = JsonSerializer.Deserialize<JsonElement>(rawBody);
-            if (body.TryGetProperty("name", out var nameProp))
-                name = nameProp.GetString() ?? "World";
-        } catch { /* empty or non-JSON body is fine */ }
-
-        logger.LogInformation("Hello handler called with name={Name}", name);
-
-        return new OkObjectResult(new {
-            message  = $"Hello, {name}! 👋",
-            platform = "VakıfBank FaaS",
-            language = ".NET / C#"
-        });
-    }
-}`
+return new OkObjectResult(new {
+    message  = $"Hello, {name}! 👋",
+    platform = "VakıfBank FaaS",
+    language = ".NET / C#"
+});`
 };
 
 function wrapCode(lang, userCode) {
@@ -256,9 +240,30 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
   }
 
   if (lang === 'dotnet') {
-    // .NET: user edits the full Function.cs file directly — the func CLI
-    // scaffolds the project (csproj, Program.cs) around it automatically.
-    return userCode;
+    // .NET: user writes only the Handle() body — wrapCode adds the full
+    // class/namespace/using shell at deploy time, exactly like Python's
+    // ASGI wrapper. Each line of userCode is indented 8 spaces (class + method).
+    const indented = userCode.split('\n').map(l => l.trim() === '' ? '' : '        ' + l).join('\n');
+    return `using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+
+namespace function;
+
+public class Function
+{
+    public static IActionResult Handle(HttpRequest request, ILogger logger)
+    {
+        using var reader = new System.IO.StreamReader(request.Body);
+        var rawBody = reader.ReadToEnd();
+
+// --- USER CODE START ---
+${indented}
+// --- USER CODE END ---
+    }
+}
+`;
   }
 
   return userCode; // Fallback
@@ -279,9 +284,7 @@ const TEMPLATE_MARKERS = {
   node:       [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
   go:         [ { from: 0, to: 19 }, { from: 25, to: 31 } ],
   typescript: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
-  // Lock: lines 0-13 = using statements + namespace + class + method sig + reader setup + blank line
-  //        lines 28-29 = closing braces of method and class
-  dotnet:     [ { from: 0, to: 13 }, { from: 28, to: 29 } ],
+  dotnet:     [],   // user sees only the body — no boilerplate to lock
   quarkus:    [ { from: 0, to: 7 }, { from: 11, to: 16 } ],
   rust:       [ { from: 0, to: 0 }, { from: 9, to: 9 } ]
 };
