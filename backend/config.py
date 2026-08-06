@@ -29,6 +29,10 @@ POLL_INTERVAL: int = 5  # seconds between ksvc readiness polls
 # Frontend HTML served by FastAPI (no separate nginx required)
 FRONTEND_PATH: Path = Path(__file__).parent.parent / "frontend" / "index.html"
 
+# Static scaffold directories for languages `func create` can't produce
+# (see LANGUAGE_CONFIG's "build_mode": "dockerfile" entries below)
+SCAFFOLDS_DIR: Path = Path(__file__).parent / "scaffolds"
+
 # ── Language → func template + entrypoint file mapping ───────────────────────
 
 LANGUAGE_CONFIG: dict[str, dict] = {
@@ -55,7 +59,14 @@ LANGUAGE_CONFIG: dict[str, dict] = {
     "dotnet": {
         "template": "dotnet",
         "entrypoint": "Function.cs",
-        "description": ".NET 8 — Function.cs → Handle(HttpRequest, HttpResponse, ILogger)",
+        "description": ".NET 8 — Function.cs → Handle(HttpRequest, ILogger)",
+        # `func` has no built-in dotnet runtime/template (and its "host"
+        # builder explicitly rejects unknown runtimes even with a Dockerfile
+        # present). So this language is scaffolded from a static local
+        # template and built via `docker build`/`docker push` ourselves;
+        # `func deploy --build=false --push=false --image ...` is then used
+        # only to create/update the Knative Service. See services/pipeline.py.
+        "build_mode": "dockerfile",
     },
     "quarkus": {
         "template": "quarkus",

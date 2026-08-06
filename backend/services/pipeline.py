@@ -18,6 +18,7 @@ import base64
 import json
 import shutil
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -28,6 +29,7 @@ from config import (
     LANGUAGE_CONFIG,
     POLL_INTERVAL,
     REGISTRY_PREFIX,
+    SCAFFOLDS_DIR,
     TENANT_NAMESPACE,
     logger,
 )
@@ -52,9 +54,29 @@ deploy_jobs: dict[str, dict] = {}
 
 
 async def step_scaffold(job_id: str, name: str, language: str, work_dir: Path, result: dict) -> AsyncGenerator[str, None]:
-    """Step 1: `func create --language <template> <name>`. Sets result['fn_dir'], result['ok']."""
+    """Step 1: scaffold the function project. Sets result['fn_dir'], result['ok'].
+
+    For `func`-native languages this is `func create --language <template> <name>`.
+    For "dockerfile" build_mode languages (e.g. dotnet — `func` has no builtin
+    template for them, see LANGUAGE_CONFIG) it copies a static local scaffold
+    from SCAFFOLDS_DIR and hand-writes a func.yaml instead, since func deploy
+    still needs one to recognize the directory as a function project even
+    though it never builds it (see step_func_deploy's dockerfile branch)."""
     lang_cfg = LANGUAGE_CONFIG[language]
     fn_dir = work_dir / name
+
+    if lang_cfg.get("build_mode") == "dockerfile":
+        yield sse_event("step", f"📦 Step 1/4 — Creating function scaffold: '{name}' ({language}, Dockerfile build)")
+        shutil.copytree(SCAFFOLDS_DIR / lang_cfg["template"], fn_dir)
+        created = datetime.now(timezone.utc).isoformat()
+        (fn_dir / "func.yaml").write_text(
+            f"specVersion: 0.36.0\nname: {name}\nruntime: {language}\ncreated: {created}\n",
+            encoding="utf-8",
+        )
+        yield sse_event("log", f"   → Scaffolded from {lang_cfg['template']} template")
+        result["fn_dir"] = fn_dir
+        result["ok"] = True
+        return
 
     yield sse_event("step", f"📦 Step 1/4 — Creating function scaffold: '{name}' ({language})")
     logger.info("[%s] func create -l %s %s", job_id, lang_cfg["template"], name)
@@ -107,21 +129,72 @@ async def step_func_deploy(
     namespace: str,
     extra_envs: list[tuple[str, str]],
     result: dict,
+    build_mode: str = "func",
 ) -> AsyncGenerator[str, None]:
-    """Step 3: `func deploy --builder pack --verbose [--env K=V ...]`."""
-    yield sse_event("step", f"🐳 Step 3/4 — Build & deploy via Buildpacks → {image}")
-    yield sse_event("log", "   First build typically takes 2–5 minutes...")
+    """Step 3: build (if needed) and deploy the function's Knative Service.
 
-    deploy_cmd = [
-        "func", "deploy",
-        "--namespace", namespace,
-        "--builder", "pack",
-        "--image", image,
-        "--verbose",  # surface the underlying pack/buildpack lifecycle output
-                      # instead of func's generic "Still building..." filler —
-                      # without this, a lifecycle failure (e.g. pip install
-                      # error) only ever shows as "exit status: 51" with no detail.
-    ]
+    build_mode="func" (default): `func deploy --builder pack --verbose`, which
+    builds via Buildpacks and pushes as part of the same command.
+
+    build_mode="dockerfile": `func` has no builder that accepts a hand-rolled
+    Dockerfile for an unknown runtime (its "host" builder rejects any runtime
+    it doesn't recognize outright, Dockerfile or not — verified against func
+    v0.49.2). So we build & push the image ourselves via the plain `docker`
+    CLI — using the same /root/.docker credentials and docker.sock the pack
+    builder already relies on, see k8s/deployment.yaml — and then run
+    `func deploy --build=false --push=false --image <image>` purely to have
+    func create/update the Knative Service resource for an already-pushed
+    image.
+    """
+    if build_mode == "dockerfile":
+        yield sse_event("step", f"🐳 Step 3/4 — Build & push Docker image → {image}")
+        yield sse_event("log", "   First build typically takes 1–3 minutes (SDK image pull + restore)...")
+
+        build_cmd = ["docker", "build", "-t", image, "."]
+        last_exit = 0
+        async for frame in stream_subprocess(build_cmd, cwd=str(fn_dir)):
+            if "exit_code" in frame:
+                last_exit = parse_exit_code(frame)
+            yield frame
+        if last_exit != 0:
+            yield sse_event("error", f"❌ docker build failed (exit {last_exit})")
+            result["ok"] = False
+            return
+
+        yield sse_event("log", f"   → Pushing {image}...")
+        push_cmd = ["docker", "push", image]
+        async for frame in stream_subprocess(push_cmd, cwd=str(fn_dir)):
+            if "exit_code" in frame:
+                last_exit = parse_exit_code(frame)
+            yield frame
+        if last_exit != 0:
+            yield sse_event("error", f"❌ docker push failed (exit {last_exit})")
+            result["ok"] = False
+            return
+
+        yield sse_event("log", "   → Registering Knative Service (func deploy --build=false)")
+        deploy_cmd = [
+            "func", "deploy",
+            "--namespace", namespace,
+            "--image", image,
+            "--build=false",
+            "--push=false",
+        ]
+    else:
+        yield sse_event("step", f"🐳 Step 3/4 — Build & deploy via Buildpacks → {image}")
+        yield sse_event("log", "   First build typically takes 2–5 minutes...")
+
+        deploy_cmd = [
+            "func", "deploy",
+            "--namespace", namespace,
+            "--builder", "pack",
+            "--image", image,
+            "--verbose",  # surface the underlying pack/buildpack lifecycle output
+                          # instead of func's generic "Still building..." filler —
+                          # without this, a lifecycle failure (e.g. pip install
+                          # error) only ever shows as "exit status: 51" with no detail.
+        ]
+
     for env_name, val in extra_envs:
         deploy_cmd.extend(["--env", f"{env_name}={val}"])
 
@@ -260,8 +333,9 @@ async def run_code_editor_deploy(job_id: str, req: DeployRequest, work_dir: Path
         if isinstance(user_cfg, dict) and user_cfg.get("envs"):
             extra_envs = [(e["name"], e.get("value", "")) for e in user_cfg["envs"]]
 
+        build_mode = LANGUAGE_CONFIG[req.language].get("build_mode", "func")
         deploy_result: dict = {}
-        async for frame in step_func_deploy(req.name, fn_dir, fn_image, TENANT_NAMESPACE, extra_envs, deploy_result):
+        async for frame in step_func_deploy(req.name, fn_dir, fn_image, TENANT_NAMESPACE, extra_envs, deploy_result, build_mode=build_mode):
             yield frame
         if not deploy_result.get("ok"):
             yield sse_event("done", json.dumps({"status": "error", "job_id": job_id}))
