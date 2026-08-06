@@ -68,6 +68,7 @@ function handleFileUpload(event) {
       if (ext === 'js') lang = 'node';
       else if (ext === 'go') lang = 'go';
       else if (ext === 'ts') lang = 'typescript';
+      else if (ext === 'cs') lang = 'dotnet';
       else if (ext === 'java') lang = 'quarkus';
       else if (ext === 'rs') lang = 'rust';
 

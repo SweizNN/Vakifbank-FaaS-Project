@@ -84,6 +84,36 @@ public class Function {
         "platform": "VakıfBank FaaS",
         "language": "Rust"
     })
+}`,
+  dotnet: `using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+
+namespace function;
+
+public class Function
+{
+    public static IActionResult Handle(HttpRequest request, ILogger logger)
+    {
+        using var reader = new System.IO.StreamReader(request.Body);
+        var rawBody = reader.ReadToEnd();
+
+        string name = "World";
+        try {
+            var body = JsonSerializer.Deserialize<JsonElement>(rawBody);
+            if (body.TryGetProperty("name", out var nameProp))
+                name = nameProp.GetString() ?? "World";
+        } catch { /* empty or non-JSON body is fine */ }
+
+        logger.LogInformation("Hello handler called with name={Name}", name);
+
+        return new OkObjectResult(new {
+            message  = $"Hello, {name}! 👋",
+            platform = "VakıfBank FaaS",
+            language = ".NET / C#"
+        });
+    }
 }`
 };
 
@@ -225,25 +255,33 @@ pub async fn handle(req: actix_web::web::Json<Value>) -> impl actix_web::Respond
 `;
   }
 
+  if (lang === 'dotnet') {
+    // .NET: user edits the full Function.cs file directly — the func CLI
+    // scaffolds the project (csproj, Program.cs) around it automatically.
+    return userCode;
+  }
+
   return userCode; // Fallback
 }
 
 const LANG_META = {
-  python: { label: 'python · func.py', mode: 'python' },
-  node: { label: 'javascript · index.js', mode: 'javascript' },
-  go: { label: 'go · function.go', mode: 'text/x-go' },
-  typescript: { label: 'typescript · index.ts', mode: 'javascript' },
-  quarkus: { label: 'java · Function.java', mode: null },
-  rust: { label: 'rust · src/main.rs', mode: null },
+  python:     { label: 'python · func.py',            mode: 'python' },
+  node:       { label: 'javascript · index.js',        mode: 'javascript' },
+  go:         { label: 'go · function.go',             mode: 'text/x-go' },
+  typescript: { label: 'typescript · index.ts',        mode: 'javascript' },
+  dotnet:     { label: 'c# · Function.cs',             mode: 'text/x-csharp' },
+  quarkus:    { label: 'java · Function.java',          mode: null },
+  rust:       { label: 'rust · src/main.rs',           mode: null },
 };
 
 const TEMPLATE_MARKERS = {
-  python: [ { from: 0, to: 0 } ],
-  node: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
-  go: [ { from: 0, to: 19 }, { from: 25, to: 31 } ],
+  python:     [ { from: 0, to: 0 } ],
+  node:       [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
+  go:         [ { from: 0, to: 19 }, { from: 25, to: 31 } ],
   typescript: [ { from: 0, to: 0 }, { from: 7, to: 7 } ],
-  quarkus: [ { from: 0, to: 7 }, { from: 11, to: 16 } ],
-  rust: [ { from: 0, to: 0 }, { from: 9, to: 9 } ]
+  dotnet:     [],   // user edits the entire file — no locked boilerplate
+  quarkus:    [ { from: 0, to: 7 }, { from: 11, to: 16 } ],
+  rust:       [ { from: 0, to: 0 }, { from: 9, to: 9 } ]
 };
 
 // Locks the boilerplate lines (function signature / closing brace) for the

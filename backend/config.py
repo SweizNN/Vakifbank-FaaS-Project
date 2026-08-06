@@ -52,6 +52,11 @@ LANGUAGE_CONFIG: dict[str, dict] = {
         "entrypoint": "index.ts",
         "description": "TypeScript — index.ts → export const handle = async (context, event) => {}",
     },
+    "dotnet": {
+        "template": "dotnet",
+        "entrypoint": "Function.cs",
+        "description": ".NET 8 — Function.cs → Handle(HttpRequest, HttpResponse, ILogger)",
+    },
     "quarkus": {
         "template": "quarkus",
         "entrypoint": "src/main/java/functions/Function.java",

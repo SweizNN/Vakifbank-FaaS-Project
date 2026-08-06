@@ -139,6 +139,7 @@
                 <option value="node">🟩 Node.js 18</option>
                 <option value="go">🐹 Go 1.21</option>
                 <option value="typescript">🔷 TypeScript</option>
+                <option value="dotnet">💜 .NET / C#</option>
                 <option value="quarkus">☕ Quarkus (Java)</option>
                 <option value="rust">🦀 Rust</option>
               </select>
@@ -155,9 +156,11 @@
                 template</button>
               <button type="button" class="lang-chip" onclick="loadTemplate('go')" data-lang="go">🐹 Go
                 template</button>
+              <button type="button" class="lang-chip" onclick="loadTemplate('dotnet')" data-lang="dotnet">💜 .NET
+                template</button>
               <button type="button" class="lang-chip" onclick="clearEditor()" data-lang="clear">✕ Clear</button>
               <button type="button" class="lang-chip" style="margin-left:auto; background:var(--accent-blue); color:white; border:none;" onclick="document.getElementById('file-upload').click()">📁 Upload File</button>
-              <input type="file" id="file-upload" style="display:none" onchange="handleFileUpload(event)" accept=".py,.js,.ts,.go,.java,.rs,.yaml,.yml">
+              <input type="file" id="file-upload" style="display:none" onchange="handleFileUpload(event)" accept=".py,.js,.ts,.go,.cs,.java,.rs,.yaml,.yml">
             </div>
             <div class="editor-wrapper">
               <div class="editor-topbar">
