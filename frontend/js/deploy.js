@@ -68,17 +68,34 @@ function setCurrentDeployLoading(loading) {
   else setDeployLoading(loading);
 }
 
+// func's own short "still working" filler lines, printed while a long step
+// (mainly the Buildpacks build) is running. These are the ONLY subprocess_log
+// lines shown in the clean panel — everything else raw from func/pack
+// (--verbose buildpack/lifecycle chatter: pip/npm/cython output, detect/
+// analyze/build/export phases, image layer progress, ...) is hidden here and
+// only available via "Full Log", since it's already captured there in full.
+const FUNC_HEARTBEAT_LINES = new Set([
+  'Building function image',
+  'Still building',
+  'Yes, still building',
+  "Don't give up on me",
+  'This is taking a while',
+]);
+
 function handleSSEEvent(event, data, fnName) {
   switch (event) {
     case 'step': appendLog('step', data); pushFullLog(data); updateStages(data); break;
+    // Pipeline's own curated narration (e.g. "→ Wrote N bytes...", "Polling...
+    // (30s remaining)") — always informative, always shown.
     case 'log':
+      appendLog('muted', data);
       pushFullLog(data);
-      // Lines prefixed with "| " are the underlying buildpack/lifecycle's own
-      // detailed output (pip/npm/cython/etc. build steps under --verbose) —
-      // verbose and noisy, so they stay in the Full Log modal only. func's own
-      // short status lines ("Still building", "Building function image", ...)
-      // have no such prefix, so they still show here — same as before --verbose.
-      if (!/^\s*\|/.test(data)) appendLog('muted', data);
+      break;
+    // Raw stdout from the wrapped func/pack subprocess — noisy under
+    // --verbose, so only func's own known heartbeat lines surface here.
+    case 'subprocess_log':
+      pushFullLog(data);
+      if (FUNC_HEARTBEAT_LINES.has(data.trim())) appendLog('muted', data);
       break;
     case 'url':
       currentLiveUrl = data;

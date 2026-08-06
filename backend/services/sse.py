@@ -76,5 +76,13 @@ async def stream_subprocess(
                 return
             line = line.rstrip()
             if line:
-                yield sse_event("log", line)
+                # Distinct from the "log" event pipeline code emits for its own
+                # curated status lines (e.g. "→ Wrote N bytes...") — this is raw
+                # stdout from the wrapped CLI (func/pack), which under --verbose
+                # includes hundreds of noisy buildpack/lifecycle lines the
+                # frontend should only surface in the Full Log view, not the
+                # main panel. Keeping the event type distinct lets the frontend
+                # tell "our narration" apart from "the tool's own chatter"
+                # without having to guess from the text content.
+                yield sse_event("subprocess_log", line)
         await asyncio.sleep(0.05)
