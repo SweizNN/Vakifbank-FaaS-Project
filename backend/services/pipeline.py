@@ -45,6 +45,25 @@ from services.k8s import (
 )
 from services.sse import parse_exit_code, sse_event, stream_subprocess
 
+
+def _merge_required_deps(language: str, user_deps: list[str]) -> list[str]:
+    """Prepend LANGUAGE_CONFIG's `required_dependencies` (e.g. serde_json for
+    rust — see config.py) to whatever the user's YAML config specifies,
+    letting a user-supplied spec for the same package override the required
+    one (e.g. pinning a different serde_json version) instead of colliding
+    with it — apply_dependencies' per-language handlers key on package name,
+    so two specs for the same name in the same list would otherwise produce
+    a duplicate/invalid entry in the manifest (e.g. two `serde_json = ".."`
+    lines in Cargo.toml)."""
+    required = LANGUAGE_CONFIG.get(language, {}).get("required_dependencies", [])
+    if not required:
+        return user_deps
+    merged = {spec.split("@", 1)[0].strip().lower(): spec for spec in required}
+    for spec in user_deps:
+        merged[spec.split("@", 1)[0].strip().lower()] = spec
+    return list(merged.values())
+
+
 # ── Shared steps ────────────────────────────────────────────────────────────
 
 
@@ -312,7 +331,8 @@ async def run_code_editor_deploy(job_id: str, req: DeployRequest, work_dir: Path
                     user_cfg = {}
                 yield sse_event("log", "   → Parsed YAML configuration (will apply via deploy args)")
 
-            deps = user_cfg.get("dependencies") if isinstance(user_cfg, dict) else None
+            user_deps = user_cfg.get("dependencies") if isinstance(user_cfg, dict) else None
+            deps = _merge_required_deps(req.language, user_deps or [])
             if deps:
                 applied = apply_dependencies(fn_dir, req.language, deps)
                 if applied:

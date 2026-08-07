@@ -84,6 +84,13 @@ LANGUAGE_CONFIG: dict[str, dict] = {
         "template": "rust",
         "entrypoint": "src/main.rs",
         "description": "Rust — src/main.rs",
+        # frontend/js/templates.js's wrapCode() wraps every Rust deploy in
+        # `use serde_json::Value;` + `actix_web::web::Json<Value>` — and the
+        # default starter template itself uses serde_json::json!() — so
+        # every Rust deploy needs this crate, not just ones where the user
+        # opts into a `dependencies:` YAML block. func's own rust scaffold's
+        # Cargo.toml ships actix-web/serde/tokio but not serde_json.
+        "required_dependencies": ["serde_json@1"],
     },
 }
 

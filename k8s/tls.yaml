@@ -14,8 +14,19 @@
 #
 #  Domain: 134.122.61.206.sslip.io — sslip.io resolves any hostname
 #  containing an IP back to that IP, so this needs no real DNS purchase.
-#  If the droplet's IP ever changes, update HOST below (and re-run the
-#  CD pipeline so a new Ingress/Certificate is issued for the new host).
+#
+#  Two values below are placeholders, not real config: the IP
+#  (134.122.61.206, this project's own droplet) and REPLACE_ME_LETSENCRYPT_
+#  EMAIL. .github/workflows/deploy.yml sed-replaces both — the IP from the
+#  DO_DROPLET_IP secret (same one the Knative magic-DNS patch uses), the
+#  email from LETSENCRYPT_EMAIL — before applying this file, so forking
+#  this repo onto a different droplet/account never needs a hand-edit here,
+#  only those two GitHub secrets. Applying this file directly (`kubectl
+#  apply -f k8s/tls.yaml`, bypassing the CD pipeline) uses the literal
+#  placeholders as-is — replace them yourself first if you do that. Do NOT
+#  use a real-looking-but-fake email (e.g. anything @example.com/.org/.net)
+#  even temporarily: Let's Encrypt hard-rejects those reserved domains and
+#  the ClusterIssuer's account registration fails outright.
 # ============================================================
 
 # ── ClusterIssuer: Let's Encrypt STAGING ──────────────────────────────────────
@@ -30,7 +41,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: yigitoguz14@gmail.com  
+    email: REPLACE_ME_LETSENCRYPT_EMAIL
     privateKeySecretRef:
       name: letsencrypt-staging-account-key
     solvers:
@@ -51,7 +62,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: yigitoguz14@gmail.com  # ← same address as above
+    email: REPLACE_ME_LETSENCRYPT_EMAIL  # ← same address as above
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:

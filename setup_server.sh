@@ -1,58 +1,84 @@
 #!/bin/bash
+# ============================================================
+#  Vakifbank-FaaS-Project/setup_server.sh
+#  Fresh-droplet prerequisites for the FaaS Platform
+#
+#  This script installs ONLY what .github/workflows/deploy.yml assumes is
+#  already on the box when it SSHes in: Docker, Minikube, kubectl, git, ufw.
+#  Everything else — Knative, Kourier, cert-manager, ingress-nginx, the
+#  faas-platform/tenant-functions namespaces, Redis, the ResourceQuota/
+#  LimitRange, TLS Ingress/Certificates, and the application itself — is
+#  installed and kept up to date by that CD pipeline on every push to main,
+#  idempotently. Duplicating any of that here would just be a second, harder
+#  -to-keep-in-sync copy of the same logic, so this script deliberately
+#  doesn't try. Run it once on a brand-new Ubuntu server, then let GitHub
+#  Actions do the rest.
+# ============================================================
 set -e
 
-echo "🚀 VakıfBank FaaS Platform - Otomatik Kurulum Betiği"
-echo "Bu betik sıfır bir Ubuntu sunucusunu tam teşekküllü bir Serverless platformuna dönüştürür."
+echo "🚀 VakıfBank FaaS Platform — Sunucu Ön Koşulları"
+echo "Bu betik sadece CD pipeline'ın (deploy.yml) ihtiyaç duyduğu temel"
+echo "araçları kurar: Docker, kubectl, Minikube, git, ufw. Kubernetes/"
+echo "Knative/cert-manager kurulumu ve uygulamanın kendisi GitHub Actions"
+echo "tarafından otomatik yapılır — bu betiğin işi burada biter."
 echo "----------------------------------------------------------------------------------"
 
-# 1. MicroK8s (Kubernetes) Kurulumu 
-echo "📦 1/5 MicroK8s Kuruluyor..."
-sudo snap install microk8s --classic --channel=1.30/stable
-sudo microk8s enable dns ingress registry rbac
-sudo alias kubectl='microk8s kubectl'
-echo "alias kubectl='microk8s kubectl'" >> ~/.bashrc
-source ~/.bashrc
+# 1. Docker
+if ! command -v docker &>/dev/null; then
+  echo "🐳 1/5 Docker kuruluyor..."
+  curl -fsSL https://get.docker.com | sh
+else
+  echo "🐳 1/5 Docker zaten kurulu, atlanıyor."
+fi
 
-# 2. Knative ve Kourier Kurulumu
-echo "🦄 2/5 Knative Serving Kuruluyor..."
-kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.14.0/serving-crds.yaml
-kubectl apply -f https://github.com/knative/serving/releases/download/knative-v1.14.0/serving-core.yaml
+# 2. kubectl
+if ! command -v kubectl &>/dev/null; then
+  echo "☸️  2/5 kubectl kuruluyor..."
+  KUBECTL_VERSION=$(curl -sSL https://dl.k8s.io/release/stable.txt)
+  curl -sSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+  chmod +x kubectl && mv kubectl /usr/local/bin/
+else
+  echo "☸️  2/5 kubectl zaten kurulu, atlanıyor."
+fi
 
-echo "🕸️ Kourier Ingress (Ağ Yönlendirici) Kuruluyor..."
-kubectl apply -f https://github.com/knative/net-kourier/releases/download/knative-v1.14.0/kourier.yaml
-kubectl patch configmap/config-network -n knative-serving \
-  --type merge --patch '{"data":{"ingress-class":"kourier.ingress.networking.knative.dev"}}'
+# 3. Minikube — deploy.yml `minikube start --driver=docker` ile kendi
+#    kendini ayağa kaldırıyor, burada sadece binary'nin var olması yeterli.
+if ! command -v minikube &>/dev/null; then
+  echo "📦 3/5 Minikube kuruluyor..."
+  curl -sSLo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+  chmod +x minikube && mv minikube /usr/local/bin/
+else
+  echo "📦 3/5 Minikube zaten kurulu, atlanıyor."
+fi
 
-# 3. Knative Func CLI Kurulumu
-echo "🛠️ 3/5 Knative Func CLI İndiriliyor..."
-FUNC_VERSION=$(curl -sSL https://api.github.com/repos/knative/func/releases/latest | grep tag_name | sed -E 's/.*"([^"]+)".*/\1/')
-curl -sSL "https://github.com/knative/func/releases/download/${FUNC_VERSION}/func_linux_amd64" \
-  -o /usr/local/bin/func && chmod +x /usr/local/bin/func
+# 4. git — deploy.yml repoyu droplet üzerinde clone/pull ediyor
+if ! command -v git &>/dev/null; then
+  echo "🔧 4/5 git kuruluyor..."
+  apt-get update -y && apt-get install -y git
+else
+  echo "🔧 4/5 git zaten kurulu, atlanıyor."
+fi
 
-# 4. Pack CLI (Konteyner İnşa Edici) Kurulumu
-echo "🧰 4/5 Buildpacks (Pack CLI) Kuruluyor..."
-sudo add-apt-repository -y ppa:cncf-buildpacks/pack-cli
-sudo apt-get update
-sudo apt-get install -y pack-cli
-
-# 5. Projenin Canlıya Alınması (Deploy)
-echo "🌐 5/5 FaaS Platformu Başlatılıyor..."
-# Projeyi GitHub'dan çek (Örnek)
-# git clone https://github.com/SİZİN_KULLANICI_ADINIZ/Vakifbank-FaaS-Project.git
-# cd Vakifbank-FaaS-Project
-
-# Kubernetes manifestlerini uygula
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/resource-quota.yaml
-kubectl apply -f k8s/redis.yaml
-kubectl apply -f k8s/deployment.yaml
-
-# NOT: cert-manager + ingress-nginx (k8s/tls.yaml) kurulumu burada değil,
-# .github/workflows/deploy.yml'deki CD pipeline'da yapılıyor — orası
-# minikube + Kourier + sslip.io magic DNS'e göre NodePort'ları (31380/31390)
-# host'a bağlıyor; bu betiğin kullandığı microk8s ingress eklentisiyle
-# birebir örtüşmüyor. Gerçek prod ortamı deploy.yml'dir, bkz. README.
+# 5. ufw — deploy.yml portları (30081, 80, 443) burada açıyor, paket kurulu
+#    olmalı; etkinleştirmeyi/kuralları CD pipeline'a bırakıyoruz.
+if ! command -v ufw &>/dev/null; then
+  echo "🛡️  5/5 ufw kuruluyor..."
+  apt-get update -y && apt-get install -y ufw
+else
+  echo "🛡️  5/5 ufw zaten kurulu, atlanıyor."
+fi
 
 echo "----------------------------------------------------------------------------------"
-echo "✅ KURULUM TAMAMLANDI! FaaS Platformunuz Birkaç Dakika İçinde Hazır Olacak."
-echo "Platforma http://<SUNUCU_IP>:30081 adresinden ulaşabilirsiniz."
+echo "✅ ÖN KOŞULLAR HAZIR."
+echo ""
+echo "Sıradaki adımlar:"
+echo "  1) Bu repo'yu fork ettiyseniz, GitHub'da Settings → Secrets and"
+echo "     variables → Actions altında şu secret'ları tanımlayın:"
+echo "       DOCKER_HUB_USER, DOCKER_HUB_USERNAME, DOCKER_HUB_TOKEN"
+echo "       DO_DROPLET_IP        (bu sunucunun genel IP'si)"
+echo "       DO_SSH_USER, DO_SSH_KEY"
+echo "       LETSENCRYPT_EMAIL    (Let's Encrypt bildirimleri için gerçek bir e-posta)"
+echo "  2) main branch'e push edin (veya Actions sekmesinden workflow'u elle"
+echo "     tetikleyin) — geri kalan her şeyi .github/workflows/deploy.yml"
+echo "     otomatik kurar ve deploy eder."
+echo "----------------------------------------------------------------------------------"

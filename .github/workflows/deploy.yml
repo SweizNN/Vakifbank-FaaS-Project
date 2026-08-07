@@ -306,13 +306,23 @@ jobs:
             kubectl apply -f k8s/redis.yaml
 
             echo "🔏 Applying ClusterIssuers + Ingress (TLS)..."
+            # k8s/tls.yaml ships with this project's own droplet IP and a
+            # placeholder ACME contact email baked in, for readability —
+            # substitute both here (IP from the same DO_DROPLET_IP secret the
+            # Knative magic-DNS patch above already uses; email from its own
+            # secret) so forking this repo onto a different droplet/account
+            # never needs a hand-edit of the file, only these two secrets.
+            DROPLET_IP="${{ secrets.DO_DROPLET_IP }}"
+            LE_EMAIL="${{ secrets.LETSENCRYPT_EMAIL }}"
             # Belt-and-suspenders on top of the endpoint wait above: kube-proxy
             # (iptables/ipvs) can take a few extra seconds to actually route
             # to a freshly-ready endpoint, so retry instead of failing the
             # whole deploy on one bad-timing webhook call.
             TLS_APPLIED=false
             for i in $(seq 1 6); do
-              if kubectl apply -f k8s/tls.yaml; then
+              if sed -e "s/134\.122\.61\.206\.sslip\.io/${DROPLET_IP}.sslip.io/g" \
+                     -e "s/REPLACE_ME_LETSENCRYPT_EMAIL/${LE_EMAIL}/g" \
+                   k8s/tls.yaml | kubectl apply -f -; then
                 TLS_APPLIED=true
                 break
               fi
@@ -354,9 +364,13 @@ jobs:
             # ── 6. Deploy with the new image tag ──────────────────────
             echo "🐳 Applying deployment manifest with tag: ${IMAGE_TAG}..."
             DOCKER_HUB_USER="${{ secrets.DOCKER_HUB_USER }}"
-            # Replace both the username prefix AND the :latest tag so the
-            # manifest works correctly regardless of which Docker Hub account is used.
+            # Replace the orchestrator image, its :latest tag, AND the
+            # REGISTRY_PREFIX tenant functions get pushed under — all three
+            # derive from DOCKER_HUB_USER, so forking this repo onto a
+            # different Docker Hub account only needs that one secret set,
+            # never a hand-edit of k8s/deployment.yaml.
             sed -e "s|image: .*/faas-platform-api:.*|image: ${DOCKER_HUB_USER}/faas-platform-api:${IMAGE_TAG}|g" \
+                -e "s|REGISTRY_PREFIX: \".*\"|REGISTRY_PREFIX: \"docker.io/${DOCKER_HUB_USER}\"|g" \
               k8s/deployment.yaml | kubectl apply -f -
 
             # ── 7. Verify Rollout Status ──────────────────────────────
