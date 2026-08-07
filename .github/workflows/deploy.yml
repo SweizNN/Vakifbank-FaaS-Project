@@ -261,6 +261,28 @@ jobs:
             kubectl patch svc ingress-nginx-controller -n ingress-nginx \
               --type merge -p '{"spec": {"type": "NodePort", "ports": [{"name": "http", "port": 80, "targetPort": "http", "nodePort": 31380}, {"name": "https", "port": 443, "targetPort": "https", "nodePort": 31390}]}}'
 
+            # Deployment "Available" can flip true a few seconds before the
+            # ValidatingAdmissionWebhook it registers (validate.nginx.ingress.
+            # kubernetes.io, served by this same controller pod) actually has
+            # a routable endpoint — any `kubectl apply` of an Ingress in that
+            # window fails with "dial tcp ...:443: connect: connection
+            # refused" against the ingress-nginx-controller-admission Service.
+            # Wait for the pod itself, then for that Service to have a real
+            # endpoint, before anything tries to create an Ingress.
+            echo "⏳ Waiting for ingress-nginx controller pod readiness..."
+            kubectl wait --for=condition=Ready pod -n ingress-nginx -l app.kubernetes.io/component=controller --timeout=180s
+
+            echo "⏳ Waiting for ingress-nginx admission webhook endpoint..."
+            for i in $(seq 1 30); do
+              EP=$(kubectl get endpoints ingress-nginx-controller-admission -n ingress-nginx -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)
+              if [ -n "$EP" ]; then
+                echo "✅ Admission webhook endpoint ready ($EP)."
+                break
+              fi
+              echo "   still waiting... ($i/30)"
+              sleep 5
+            done
+
             # ── 3. Clone or update the repository ─────────────────────
             if [ ! -d "$PROJECT_DIR" ]; then
               echo "📥 Cloning repository..."
@@ -284,7 +306,23 @@ jobs:
             kubectl apply -f k8s/redis.yaml
 
             echo "🔏 Applying ClusterIssuers + Ingress (TLS)..."
-            kubectl apply -f k8s/tls.yaml
+            # Belt-and-suspenders on top of the endpoint wait above: kube-proxy
+            # (iptables/ipvs) can take a few extra seconds to actually route
+            # to a freshly-ready endpoint, so retry instead of failing the
+            # whole deploy on one bad-timing webhook call.
+            TLS_APPLIED=false
+            for i in $(seq 1 6); do
+              if kubectl apply -f k8s/tls.yaml; then
+                TLS_APPLIED=true
+                break
+              fi
+              echo "   ingress-nginx admission webhook not reachable yet, retrying in 10s... ($i/6)"
+              sleep 10
+            done
+            if [ "$TLS_APPLIED" != "true" ]; then
+              echo "❌ Failed to apply k8s/tls.yaml after retries."
+              exit 1
+            fi
 
             # Credentials for Orchestrator (to push)
             kubectl create secret docker-registry docker-hub-creds \
