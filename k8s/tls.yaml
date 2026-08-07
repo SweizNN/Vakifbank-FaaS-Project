@@ -30,7 +30,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    email: you@example.com  # ← replace with a real address you check; Let's Encrypt emails expiry/revocation notices here
+    email: yigitoguz14@gmail.com  
     privateKeySecretRef:
       name: letsencrypt-staging-account-key
     solvers:
@@ -51,7 +51,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: you@example.com  # ← same address as above
+    email: yigitoguz14@gmail.com  # ← same address as above
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:
@@ -105,6 +105,14 @@ kind: Ingress
 metadata:
   name: knative-passthrough-ingress
   namespace: kourier-system
+  annotations:
+    # ingress-nginx force-redirects HTTP → HTTPS by default even for a host
+    # that has no tls: block on ANY Ingress (it uses its own fake default
+    # cert for the 443 side of that redirect) — without this, every plain
+    # http://<fn>....sslip.io link 308s to an https:// host nothing serves a
+    # real cert for, the request never reaches Kourier, and no pod ever
+    # cold-starts. Functions are plain HTTP by design (see file header).
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   rules:
