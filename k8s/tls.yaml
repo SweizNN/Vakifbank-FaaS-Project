@@ -1,0 +1,120 @@
+# ============================================================
+#  Vakifbank-FaaS-Project/k8s/tls.yaml
+#  TLS for the FaaS Platform UI/API via cert-manager + Let's Encrypt
+#
+#  Scope: the orchestrator (UI, /docs, /deploy, ...) only — NOT the
+#  deployed tenant functions, which keep working over plain HTTP through
+#  Kourier exactly as they do today (see the passthrough Ingress below).
+#
+#  Prerequisites (installed by .github/workflows/deploy.yml, not by this
+#  file — cert-manager and ingress-nginx ship their own CRDs/namespaces
+#  and are too large to vendor into this kustomize tree):
+#    - cert-manager (namespace: cert-manager)
+#    - ingress-nginx (namespace: ingress-nginx), NodePort 31380/31390
+#
+#  Domain: 134.122.61.206.sslip.io — sslip.io resolves any hostname
+#  containing an IP back to that IP, so this needs no real DNS purchase.
+#  If the droplet's IP ever changes, update HOST below (and re-run the
+#  CD pipeline so a new Ingress/Certificate is issued for the new host).
+# ============================================================
+
+# ── ClusterIssuer: Let's Encrypt STAGING ──────────────────────────────────────
+# Use this one first. Staging certs aren't trusted by browsers (you'll see a
+# warning), but it proves the whole HTTP-01 flow works without burning
+# Let's Encrypt's production rate limit (5 failures/hour, 50 certs/week/domain)
+# while you're still debugging DNS/ingress/firewall issues.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: you@example.com  # ← replace with a real address you check; Let's Encrypt emails expiry/revocation notices here
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+
+---
+# ── ClusterIssuer: Let's Encrypt PRODUCTION ───────────────────────────────────
+# Switch faas-platform-ingress's cert-manager.io/cluster-issuer annotation
+# (below) from letsencrypt-staging to letsencrypt-prod once you've confirmed
+# `kubectl describe certificate faas-platform-tls -n faas-platform` shows
+# Ready=True against staging.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: you@example.com  # ← same address as above
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+
+---
+# ── Ingress: FaaS Platform UI/API (TLS-terminated) ────────────────────────────
+# cert-manager's ingress-shim watches for the cluster-issuer annotation and
+# auto-creates a matching Certificate resource — no separate Certificate
+# object needed for the common case.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: faas-platform-ingress
+  namespace: faas-platform
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging  # ← flip to letsencrypt-prod once verified
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - 134.122.61.206.sslip.io
+      secretName: faas-platform-tls
+  rules:
+    - host: 134.122.61.206.sslip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: faas-platform-service
+                port:
+                  number: 8000
+
+---
+# ── Ingress: Knative function passthrough (unchanged, plain HTTP) ────────────
+# Lives in kourier-system because a standard Ingress can only point at a
+# Service in its own namespace, and Kourier's Service is there. This is what
+# lets ingress-nginx become the droplet's single host-port-80/443 entrypoint
+# (see deploy.yml) without breaking existing function URLs — every deployed
+# function is still reached exactly as before, just proxied through one more
+# hop. TLS for *functions* (as opposed to the platform UI/API) is out of
+# scope here: it needs a wildcard certificate, which needs DNS-01, which
+# sslip.io can't do (there's no DNS provider to hand cert-manager a token for).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: knative-passthrough-ingress
+  namespace: kourier-system
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "*.tenant-functions.134.122.61.206.sslip.io"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kourier
+                port:
+                  number: 80

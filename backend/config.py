@@ -26,6 +26,13 @@ WORKSPACE_BASE: Path = Path(os.getenv("WORKSPACE_BASE", "/tmp/faas-workspace"))
 DEPLOY_TIMEOUT: int = int(os.getenv("DEPLOY_TIMEOUT_SECONDS", "600"))  # 10 min
 POLL_INTERVAL: int = 5  # seconds between ksvc readiness polls
 
+# Redis-backed deploy-job store (services/job_store.py). Defaults to a local
+# instance for dev; k8s/deployment.yaml overrides this to the in-cluster
+# redis Service (see k8s/redis.yaml) so every orchestrator replica reads/
+# writes the same job state instead of an unshared in-memory dict.
+REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+JOB_TTL_SECONDS: int = int(os.getenv("JOB_TTL_SECONDS", str(24 * 60 * 60)))  # 24h
+
 # Frontend HTML served by FastAPI (no separate nginx required)
 FRONTEND_PATH: Path = Path(__file__).parent.parent / "frontend" / "index.html"
 

@@ -35,6 +35,7 @@ from config import (
 )
 from models import DeployRequest
 from services.dependencies import apply_dependencies
+from services.job_store import set_job
 from services.k8s import (
     annotate_ksvc,
     annotate_revision,
@@ -43,12 +44,6 @@ from services.k8s import (
     get_latest_revision_name,
 )
 from services.sse import parse_exit_code, sse_event, stream_subprocess
-
-# In-memory job registry so /jobs/{id} can return status after the SSE ends.
-# Keyed by 8-char job UUID. NEVER put credentials/API keys in here — it's
-# readable, unauthenticated and indefinitely, via GET /jobs/{job_id}.
-deploy_jobs: dict[str, dict] = {}
-
 
 # ── Shared steps ────────────────────────────────────────────────────────────
 
@@ -364,7 +359,7 @@ async def run_code_editor_deploy(job_id: str, req: DeployRequest, work_dir: Path
             "language": req.language,
             "image": fn_image,
         }
-        deploy_jobs[job_id] = result_payload
+        await set_job(job_id, result_payload)
 
         yield sse_event("step", f"✅ '{req.name}' is LIVE!")
         yield sse_event("url", url)

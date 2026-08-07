@@ -85,7 +85,13 @@ jobs:
 
           # Use client-side dry-run to validate YAML structure
           kubectl apply --dry-run=client -f k8s/namespace.yaml || true
+          kubectl apply --dry-run=client -f k8s/resource-quota.yaml || true
           kubectl apply --dry-run=client -f k8s/deployment.yaml || true
+          kubectl apply --dry-run=client -f k8s/redis.yaml || true
+          # tls.yaml uses cert-manager CRDs (ClusterIssuer) kubectl doesn't
+          # ship a schema for client-side — this step is `|| true` anyway,
+          # it's a syntax sanity check, not a cluster-aware validation.
+          kubectl apply --dry-run=client -f k8s/tls.yaml || true
           echo "✅ k8s manifest validation complete"
 
   # ────────────────────────────────────────────────────────────────
@@ -234,6 +240,27 @@ jobs:
             kubectl patch configmap/config-domain -n knative-serving \
               --type merge --patch "{\"data\": {\"${DROPLET_IP}.sslip.io\": \"\"}}"
 
+            # ── 2b. cert-manager (Let's Encrypt) ───────────────────────
+            echo "🔐 Ensuring cert-manager is installed..."
+            kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.15.3/cert-manager.yaml
+            kubectl wait --for=condition=Available --timeout=180s deployment/cert-manager -n cert-manager
+            kubectl wait --for=condition=Available --timeout=180s deployment/cert-manager-webhook -n cert-manager
+
+            # ── 2c. ingress-nginx ────────────────────────────────────────
+            # The single host-port-80/443 entrypoint from here on: it TLS-
+            # terminates for the FaaS Platform UI/API and answers Let's
+            # Encrypt's HTTP-01 challenges. Knative/Kourier traffic keeps
+            # working unchanged behind it via the passthrough Ingress in
+            # k8s/tls.yaml (kourier-system namespace) — see that file's
+            # comments for why.
+            echo "🌐 Ensuring ingress-nginx is installed..."
+            kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.2/deploy/static/provider/cloud/deploy.yaml
+            kubectl wait --for=condition=Available --timeout=180s deployment/ingress-nginx-controller -n ingress-nginx
+
+            # Fixed NodePorts so the host-level proxy (step 8) has a stable target
+            kubectl patch svc ingress-nginx-controller -n ingress-nginx \
+              --type merge -p '{"spec": {"type": "NodePort", "ports": [{"name": "http", "port": 80, "targetPort": "http", "nodePort": 31380}, {"name": "https", "port": 443, "targetPort": "https", "nodePort": 31390}]}}'
+
             # ── 3. Clone or update the repository ─────────────────────
             if [ ! -d "$PROJECT_DIR" ]; then
               echo "📥 Cloning repository..."
@@ -246,10 +273,19 @@ jobs:
               git reset --hard "origin/$(git rev-parse --abbrev-ref HEAD)"
             fi
 
-            # ── 0. Setup Namespaces and Docker Credentials ────────────
+            # ── 0. Setup Namespaces, Quotas, Redis, TLS and Docker Credentials
             echo "🔐 Setting up Kubernetes Secrets for Docker Hub..."
             kubectl apply -f k8s/namespace.yaml
-            
+
+            echo "📏 Applying tenant-functions LimitRange..."
+            kubectl apply -f k8s/resource-quota.yaml
+
+            echo "🗄️  Applying Redis (shared deploy-job store)..."
+            kubectl apply -f k8s/redis.yaml
+
+            echo "🔏 Applying ClusterIssuers + Ingress (TLS)..."
+            kubectl apply -f k8s/tls.yaml
+
             # Credentials for Orchestrator (to push)
             kubectl create secret docker-registry docker-hub-creds \
               --docker-server=https://index.docker.io/v1/ \
@@ -293,13 +329,21 @@ jobs:
             # ── 8. Setup Port-Forwarding (Robust Docker Socat Proxy) ──
             echo "🔌 Setting up Port-Forwarding for external access..."
             MINIKUBE_IP=$(minikube ip)
-            # Proxy for FaaS Platform API
+            # Proxy for FaaS Platform API — legacy plain-HTTP NodePort access,
+            # kept working as-is alongside the new TLS entrypoint below.
             docker rm -f faas-api-proxy || true
             docker run -d --restart always --name faas-api-proxy --network host alpine/socat TCP-LISTEN:30081,fork,reuseaddr TCP:${MINIKUBE_IP}:30081
 
-            # Proxy for Knative Kourier Gateway (Functions)
-            docker rm -f kourier-proxy || true
-            docker run -d --restart always --name kourier-proxy --network host alpine/socat TCP-LISTEN:80,fork,reuseaddr TCP:${MINIKUBE_IP}:31080
+            # Proxy host port 80/443 → ingress-nginx, which is now the single
+            # entrypoint for both the TLS'd FaaS Platform UI/API and (via the
+            # passthrough Ingress in k8s/tls.yaml) plain-HTTP Knative function
+            # traffic that used to be forwarded straight to Kourier.
+            docker rm -f kourier-proxy || true  # old direct-to-Kourier proxy, superseded by ingress-http-proxy below
+            docker rm -f ingress-http-proxy || true
+            docker run -d --restart always --name ingress-http-proxy --network host alpine/socat TCP-LISTEN:80,fork,reuseaddr TCP:${MINIKUBE_IP}:31380
+
+            docker rm -f ingress-https-proxy || true
+            docker run -d --restart always --name ingress-https-proxy --network host alpine/socat TCP-LISTEN:443,fork,reuseaddr TCP:${MINIKUBE_IP}:31390
 
             # ── 9. Verify pods are running ─────────────────────────────
             echo ""
@@ -309,9 +353,10 @@ jobs:
             echo "========================================================"
             echo " ✅ DEPLOYMENT SUCCESSFUL!"
             DROPLET_IP="${{ secrets.DO_DROPLET_IP }}"
-            echo " 🌐 FaaS Platform UI: http://${DROPLET_IP}:30081"
-            echo " 📡 Health Check:     http://${DROPLET_IP}:30081/health"
-            echo " 📚 API Docs:         http://${DROPLET_IP}:30081/docs"
+            echo " 🔐 FaaS Platform UI (TLS): https://${DROPLET_IP}.sslip.io"
+            echo " 🌐 FaaS Platform UI:       http://${DROPLET_IP}:30081  (legacy, still up)"
+            echo " 📡 Health Check:           http://${DROPLET_IP}:30081/health"
+            echo " 📚 API Docs:               http://${DROPLET_IP}:30081/docs"
             echo "========================================================"
 
       - name: "📊 Deployment Summary"
@@ -333,7 +378,14 @@ jobs:
           | **Namespace** | \`faas-platform\` |
 
           ### 🌐 Access Points
-          - **FaaS UI**: [http://${{ secrets.DO_DROPLET_IP }}:30081](http://${{ secrets.DO_DROPLET_IP }}:30081)
+          - **FaaS UI (TLS)**: https://${{ secrets.DO_DROPLET_IP }}.sslip.io — staging Let's Encrypt cert until flipped to prod in k8s/tls.yaml, see below
+          - **FaaS UI (legacy)**: [http://${{ secrets.DO_DROPLET_IP }}:30081](http://${{ secrets.DO_DROPLET_IP }}:30081)
           - **API Docs**: [http://${{ secrets.DO_DROPLET_IP }}:30081/docs](http://${{ secrets.DO_DROPLET_IP }}:30081/docs)
           - **Health**: [http://${{ secrets.DO_DROPLET_IP }}:30081/health](http://${{ secrets.DO_DROPLET_IP }}:30081/health)
+
+          Staging TLS certs aren't browser-trusted (expected warning). Once
+          \`kubectl describe certificate faas-platform-tls -n faas-platform\`
+          shows \`Ready=True\`, switch the \`cert-manager.io/cluster-issuer\`
+          annotation on \`faas-platform-ingress\` (k8s/tls.yaml) to
+          \`letsencrypt-prod\` and re-run this workflow.
           EOF

@@ -1,0 +1,103 @@
+# ============================================================
+#  Vakifbank-FaaS-Project/k8s/redis.yaml
+#  Redis — shared deploy-job status store for the FaaS orchestrator
+#
+#  Backs services/job_store.py (backend/config.py: REDIS_URL). Moving job
+#  state out of the orchestrator pod's memory and into here is what makes
+#  `replicas: 2` in deployment.yaml safe: any orchestrator pod can now
+#  serve GET /jobs/{id} for a job that was written by a different pod.
+#
+#  Deliberately a single replica with no clustering/Sentinel — this is a
+#  short-lived (JOB_TTL_SECONDS, default 24h) status cache, not a database.
+#  Losing it loses in-flight job-status lookups, not deployed functions or
+#  their state (that's stored as ksvc/revision annotations, see
+#  services/k8s.py). A PVC keeps data across pod restarts; add
+#  replication/Sentinel only if that recovery window ever matters more
+#  than it does today.
+# ============================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: faas-platform
+  labels:
+    app: faas-redis
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: "1Gi"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: faas-redis
+  namespace: faas-platform
+  labels:
+    app: faas-redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # avoid two pods ever attaching the same RWO volume
+  selector:
+    matchLabels:
+      app: faas-redis
+  template:
+    metadata:
+      labels:
+        app: faas-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.2-alpine
+          # Persist to disk (AOF) so job history survives a pod restart —
+          # still just a cache in spirit, but no reason to lose it for free.
+          args: ["--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+          ports:
+            - name: redis
+              containerPort: 6379
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "192Mi"
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 3
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: faas-redis
+  namespace: faas-platform
+  labels:
+    app: faas-redis
+spec:
+  type: ClusterIP
+  selector:
+    app: faas-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379

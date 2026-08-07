@@ -30,8 +30,9 @@ from config import DEPLOY_TIMEOUT, REGISTRY_PREFIX, TENANT_NAMESPACE, logger
 from generators.sql_to_python import generate_function_code, get_dependencies
 from models import SqlDeployRequest
 from services.dependencies import apply_dependencies
+from services.job_store import set_job
 from services.k8s import annotate_ksvc, annotate_revision, get_latest_revision_name
-from services.pipeline import deploy_jobs, step_func_deploy, step_poll_ready, step_scaffold
+from services.pipeline import step_func_deploy, step_poll_ready, step_scaffold
 from services.secret_provisioning import generate_api_key, provision_db_secret_and_envs
 from services.sql_validator import SqlValidationError, validate_select_only
 from services.sse import sse_event
@@ -133,10 +134,10 @@ async def run_sql_api_deploy(job_id: str, req: SqlDeployRequest, work_dir: Path)
             yield sse_event("log", f"   ⚠️  Annotation step skipped: {ann_exc}")
 
         # ── Success ────────────────────────────────────────────────────────
-        # api_key deliberately never goes into deploy_jobs — GET /jobs/{id} is
-        # unauthenticated and has no expiry, so anyone who learned/guessed the
-        # job_id could re-fetch it later. It's emitted exactly once, in this
-        # SSE frame only.
+        # api_key deliberately never goes into the job store — GET /jobs/{id}
+        # is unauthenticated and the record lives for JOB_TTL_SECONDS (24h by
+        # default), so anyone who learned/guessed the job_id could re-fetch it
+        # later. It's emitted exactly once, in this SSE frame only.
         result_payload = {
             "status": "success",
             "job_id": job_id,
@@ -146,7 +147,7 @@ async def run_sql_api_deploy(job_id: str, req: SqlDeployRequest, work_dir: Path)
             "db_type": req.db_type,
             "image": fn_image,
         }
-        deploy_jobs[job_id] = result_payload
+        await set_job(job_id, result_payload)
 
         yield sse_event("step", f"✅ '{req.name}' is LIVE!")
         yield sse_event("url", url)

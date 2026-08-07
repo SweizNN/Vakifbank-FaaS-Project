@@ -98,6 +98,7 @@ Vakifbank-FaaS-Project/
 │   │   └── health.py, jobs.py, languages.py, logs.py, proxy.py
 │   ├── services/                   # Business logic — no FastAPI imports
 │   │   ├── pipeline.py             #   func create/deploy + Docker build orchestration
+│   │   ├── job_store.py            #   Redis-backed deploy-job status (shared across replicas)
 │   │   ├── dependencies.py         #   injects deps into each language's manifest file
 │   │   ├── k8s.py                  #   kubectl wrapper functions
 │   │   └── sql_pipeline.py, sql_validator.py, secret_provisioning.py, sse.py, health_check.py
@@ -113,8 +114,11 @@ Vakifbank-FaaS-Project/
 │                                    # sql-deploy, health, theme, library-modal, utils
 │
 ├── k8s/
-│   ├── namespace.yaml              # faas-platform + tenant-functions + RBAC
-│   ├── deployment.yaml             # Deployment, ConfigMap, Secret, Service
+│   ├── namespace.yaml              # faas-platform + tenant-functions + RBAC + ResourceQuota
+│   ├── resource-quota.yaml         # LimitRange — per-container CPU/memory floor+ceiling
+│   ├── deployment.yaml             # Deployment (2 replicas), ConfigMap, Secret, Service
+│   ├── redis.yaml                  # Shared deploy-job store (backs services/job_store.py)
+│   ├── tls.yaml                    # cert-manager ClusterIssuers + Ingress (Let's Encrypt)
 │   └── kustomization.yaml
 │
 ├── docs/screenshots/                # Images used in this README
@@ -130,6 +134,8 @@ Vakifbank-FaaS-Project/
 | Infrastructure | Kubernetes, Knative Serving, Docker |
 | Function Builds | Knative `func` CLI + Cloud Native Buildpacks (6 languages) · plain `docker build` for .NET |
 | Backend | Python 3.11, FastAPI, uvicorn |
+| Shared state | Redis — deploy-job status, so the orchestrator can run >1 replica (see [High Availability](#high-availability--shared-state)) |
+| TLS | cert-manager + Let's Encrypt, terminated at ingress-nginx (see [TLS](#tls)) |
 | Frontend | HTML5, Vanilla JS, CodeMirror editor |
 | Container Registry | Docker Hub |
 | CI/CD | GitHub Actions |
@@ -169,6 +175,67 @@ The pipeline:
 1. **Test** — lint, syntax, unit, and integration tests for the Python backend
 2. **Build** — builds `sweizn/faas-platform-api:sha-XXXXXXX` and pushes it to Docker Hub
 3. **Deploy** — SSHes into the droplet, applies the manifests, and rolls out the new image
+
+---
+
+## Production Hardening
+
+### Resource Quotas
+
+Every function deploy used to run with no CPU/memory bounds at all — a single
+runaway function could take down every other tenant on the droplet.
+[`k8s/resource-quota.yaml`](k8s/resource-quota.yaml) adds a `LimitRange` for
+`tenant-functions`: containers that don't request their own limits (every
+deploy today) get `100m`/`128Mi` requests and a `500m`/`512Mi` cap by default,
+with a hard `2` vCPU / `2Gi` ceiling even for functions that do set their own.
+[`k8s/namespace.yaml`](k8s/namespace.yaml)'s pre-existing `ResourceQuota` was
+extended the same way, capping the namespace as a whole (`requests.cpu: 3`,
+`limits.cpu: 6`, etc.) so it can't consume the entire 4 vCPU / 8 GB droplet
+and starve `faas-platform` itself or the node's system pods.
+
+```bash
+kubectl describe limitrange tenant-functions-limits -n tenant-functions
+kubectl describe resourcequota tenant-functions-quota -n tenant-functions
+```
+
+### High Availability / Shared State
+
+Deploy-job status (`GET /jobs/{id}`) used to live in a plain in-memory `dict`
+inside the FastAPI process. That only works with exactly one orchestrator
+pod — a rollout or a crash would silently drop every in-flight job's status.
+[`services/job_store.py`](backend/services/job_store.py) moves that state into
+Redis ([`k8s/redis.yaml`](k8s/redis.yaml)), which is what makes
+`replicas: 2` in [`k8s/deployment.yaml`](k8s/deployment.yaml) safe: any
+orchestrator pod can now answer a status lookup for a job a *different* pod
+wrote. Job records expire after `JOB_TTL_SECONDS` (24h by default) — it's a
+status cache, not a database; a deployed function's real state still lives as
+ksvc/Revision annotations in the cluster, not in Redis.
+
+```bash
+kubectl get pods -n faas-platform -l app=faas-platform-api   # 2 pods
+kubectl exec -n faas-platform deploy/faas-redis -- redis-cli keys 'faas:job:*'
+```
+
+### TLS
+
+The platform's UI/API (not the deployed tenant functions — see
+[`k8s/tls.yaml`](k8s/tls.yaml) for why that's a separate problem requiring a
+wildcard cert) is served over HTTPS via **cert-manager** issuing a real
+**Let's Encrypt** certificate, terminated at an **ingress-nginx** controller
+that the CD pipeline installs as the droplet's single host-port-80/443
+entrypoint — Knative/Kourier function traffic keeps flowing through it
+unchanged via a passthrough `Ingress`. No purchased domain needed: it's
+served on `https://<droplet-ip>.sslip.io`, since [sslip.io](https://sslip.io)
+resolves any hostname containing an IP back to that IP.
+
+New deploys default to the **staging** Let's Encrypt issuer (untrusted-by-
+design cert, but proves HTTP-01 end to end without touching production rate
+limits). Once verified, flip the `cert-manager.io/cluster-issuer` annotation
+on `faas-platform-ingress` in `k8s/tls.yaml` to `letsencrypt-prod`:
+
+```bash
+kubectl describe certificate faas-platform-tls -n faas-platform   # wait for Ready=True
+```
 
 ---
 
@@ -216,6 +283,7 @@ kubectl logs -n tenant-functions -l serving.knative.dev/service=my-function --pr
 
 ## Access Points (Production)
 
-- 🌐 **FaaS UI**: [http://134.122.61.206:30081](http://134.122.61.206:30081)
+- 🔐 **FaaS UI (TLS)**: https://134.122.61.206.sslip.io — staging Let's Encrypt cert until flipped to prod, see [TLS](#tls)
+- 🌐 **FaaS UI (legacy)**: [http://134.122.61.206:30081](http://134.122.61.206:30081)
 - 📚 **API Docs (Swagger)**: [http://134.122.61.206:30081/docs](http://134.122.61.206:30081/docs)
 - 🛡️ **Health JSON**: [http://134.122.61.206:30081/health](http://134.122.61.206:30081/health)

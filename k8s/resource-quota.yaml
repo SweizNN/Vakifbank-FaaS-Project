@@ -1,0 +1,41 @@
+# ============================================================
+#  Vakifbank-FaaS-Project/k8s/resource-quota.yaml
+#  LimitRange for tenant-functions
+#
+#  The ResourceQuota in namespace.yaml caps the *namespace total*
+#  (how much CPU/memory all tenant functions may consume together).
+#  It says nothing about any *individual* container — without a
+#  LimitRange, a single deploy with no requests/limits (which is
+#  every deploy today; services/pipeline.py never sets them) can
+#  freely burst to 100% of whatever is left in the quota, starving
+#  every other function on the 4 vCPU / 8 GB droplet.
+#
+#  This file adds that per-container guardrail:
+#    - default / defaultRequest → applied automatically to every
+#      container that doesn't specify its own (i.e. every function
+#      deployed through the platform today).
+#    - min / max               → hard floor/ceiling; `func deploy`
+#      would be rejected by the API server if it ever did set
+#      requests/limits outside this range.
+# ============================================================
+
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tenant-functions-limits
+  namespace: tenant-functions
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "128Mi"
+      min:
+        cpu: "50m"
+        memory: "64Mi"
+      max:
+        cpu: "2"
+        memory: "2Gi"

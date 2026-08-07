@@ -35,6 +35,11 @@ data:
   # FastAPI log level
   LOG_LEVEL: "info"
 
+  # In-cluster Redis (k8s/redis.yaml) backing the shared deploy-job store —
+  # see backend/services/job_store.py. Required for replicas > 1: it's what
+  # lets every orchestrator pod answer GET /jobs/{id} for a job any pod wrote.
+  REDIS_URL: "redis://faas-redis.faas-platform.svc.cluster.local:6379/0"
+
 ---
 # ── Deployment: FastAPI FaaS Orchestrator ────────────────────────────────────
 apiVersion: apps/v1
@@ -48,7 +53,10 @@ metadata:
   annotations:
     deployment.kubernetes.io/revision: "1"
 spec:
-  replicas: 1
+  # 2 replicas for HA (rolling updates + node hiccups no longer drop
+  # in-flight job-status lookups) — safe now that deploy-job state lives in
+  # Redis (k8s/redis.yaml) instead of each pod's own memory.
+  replicas: 2
   selector:
     matchLabels:
       app: faas-platform-api
@@ -131,6 +139,11 @@ spec:
                 configMapKeyRef:
                   name: faas-platform-config
                   key: LOG_LEVEL
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: faas-platform-config
+                  key: REDIS_URL
             # Expose pod identity for logging
             - name: POD_NAME
               valueFrom:

@@ -3,4 +3,7 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  - resource-quota.yaml
   - deployment.yaml
+  - redis.yaml
+  - tls.yaml

@@ -29,8 +29,11 @@ metadata:
 
 ---
 # ── ResourceQuota: tenant-functions ──────────────────────────────────────────
-# Generous limits matching the 4 vCPU / 8 GB DigitalOcean Droplet.
-# No per-pod limits are set (as specified), only namespace-wide totals.
+# Namespace-wide totals sized for the 4 vCPU / 8 GB DigitalOcean Droplet,
+# leaving headroom for the faas-platform namespace + node system pods (kube
+# system, k3s/minikube internals, Knative controllers). Per-container bounds
+# (so one function can't eat the whole quota by itself) are defined in the
+# LimitRange in resource-quota.yaml.
 apiVersion: v1
 kind: ResourceQuota
 metadata:
@@ -40,7 +43,10 @@ spec:
   hard:
     pods:                "50"
     services:            "50"
-    # No CPU/Memory limits per the project spec — server has enough capacity
+    requests.cpu:        "3"
+    requests.memory:     "5Gi"
+    limits.cpu:           "6"
+    limits.memory:        "6Gi"
 
 ---
 # ── ServiceAccount for FastAPI Orchestrator ───────────────────────────────────

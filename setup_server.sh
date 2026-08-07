@@ -43,7 +43,15 @@ echo "🌐 5/5 FaaS Platformu Başlatılıyor..."
 
 # Kubernetes manifestlerini uygula
 kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/resource-quota.yaml
+kubectl apply -f k8s/redis.yaml
 kubectl apply -f k8s/deployment.yaml
+
+# NOT: cert-manager + ingress-nginx (k8s/tls.yaml) kurulumu burada değil,
+# .github/workflows/deploy.yml'deki CD pipeline'da yapılıyor — orası
+# minikube + Kourier + sslip.io magic DNS'e göre NodePort'ları (31380/31390)
+# host'a bağlıyor; bu betiğin kullandığı microk8s ingress eklentisiyle
+# birebir örtüşmüyor. Gerçek prod ortamı deploy.yml'dir, bkz. README.
 
 echo "----------------------------------------------------------------------------------"
 echo "✅ KURULUM TAMAMLANDI! FaaS Platformunuz Birkaç Dakika İçinde Hazır Olacak."

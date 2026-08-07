@@ -112,6 +112,26 @@ def check_kubernetes_cluster() -> ToolStatus:
     return status
 
 
+def check_redis() -> ToolStatus:
+    """Verify the shared deploy-job store (see services/job_store.py) is
+    reachable. Non-critical: a Redis outage degrades GET /jobs/{id} (503)
+    but never blocks deploys themselves — see job_store.set_job()."""
+    status = ToolStatus(name="redis", found=False, critical=False)
+    try:
+        import redis as redis_sync  # sync client is enough for a one-shot ping
+        from config import REDIS_URL
+
+        client = redis_sync.from_url(REDIS_URL, socket_connect_timeout=3, socket_timeout=3)
+        if client.ping():
+            status.found = True
+            info = client.info("server")
+            status.version = f"redis {info.get('redis_version', '?')} @ {REDIS_URL.split('@')[-1]}"
+    except Exception as exc:
+        status.error = str(exc)[:200]
+
+    return status
+
+
 def check_knative_serving() -> ToolStatus:
     """Verify Knative Serving CRDs are installed."""
     status = ToolStatus(name="knative-serving", found=False, critical=True)
@@ -202,6 +222,10 @@ def run_all_checks() -> dict:
     # Check Knative Serving
     knative_status = check_knative_serving()
     results[knative_status.name] = knative_status.to_dict()
+
+    # Check Redis (shared deploy-job store)
+    redis_status = check_redis()
+    results[redis_status.name] = redis_status.to_dict()
 
     return results
 

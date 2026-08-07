@@ -7,8 +7,8 @@ from fastapi.responses import StreamingResponse
 
 from config import TENANT_NAMESPACE, WORKSPACE_BASE, logger
 from models import SqlDeployRequest
+from services.job_store import set_job
 from services.k8s import service_exists
-from services.pipeline import deploy_jobs
 from services.sql_pipeline import run_sql_api_deploy
 
 router = APIRouter(tags=["sql-deploy"])
@@ -27,7 +27,7 @@ async def sql_deploy_function(req: SqlDeployRequest):
     work_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("[%s] SQL-to-API deploy: name=%s db_type=%s", job_id, req.name, req.db_type)
-    deploy_jobs[job_id] = {"status": "running", "function_name": req.name}
+    await set_job(job_id, {"status": "running", "function_name": req.name})
 
     return StreamingResponse(
         run_sql_api_deploy(job_id, req, work_dir),
