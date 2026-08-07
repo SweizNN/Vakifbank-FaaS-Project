@@ -11,12 +11,22 @@
 #  every other function on the 4 vCPU / 8 GB droplet.
 #
 #  This file adds that per-container guardrail:
-#    - default / defaultRequest → applied automatically to every
-#      container that doesn't specify its own (i.e. every function
-#      deployed through the platform today).
-#    - min / max               → hard floor/ceiling; `func deploy`
-#      would be rejected by the API server if it ever did set
-#      requests/limits outside this range.
+#    - default / defaultRequest → applied automatically to any container
+#      that doesn't specify its own value for that resource.
+#    - min / max               → hard floor/ceiling on whatever value a
+#      container *does* end up with, whether that came from `default`/
+#      `defaultRequest` above or was set explicitly.
+#
+#  min.cpu MUST stay <= Knative's own revision-cpu-request default (25m,
+#  from the config-defaults ConfigMap in knative-serving — see
+#  https://knative.dev/docs/serving/configuration/deployment/). Knative's
+#  revision controller sets that request on every user-container itself,
+#  unconditionally, regardless of what `func deploy` sends — it's not
+#  something a LimitRange default fills in. Set min.cpu above it (e.g. the
+#  50m this file originally shipped with) and the API server rejects the
+#  pod outright ("minimum cpu usage per Container is 50m, but request is
+#  25m") — every single deploy fails FailedCreate/RevisionMissing, exactly
+#  as bare metal as it sounds. Learned this the hard way in production.
 # ============================================================
 
 apiVersion: v1
@@ -34,7 +44,7 @@ spec:
         cpu: "100m"
         memory: "128Mi"
       min:
-        cpu: "50m"
+        cpu: "10m"
         memory: "64Mi"
       max:
         cpu: "2"
